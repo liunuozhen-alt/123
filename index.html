@@ -1107,8 +1107,12 @@
   <!-- 🔌 离线单机版 · 冷启动预热（L5）：
        把主入口 chunk 及其「静态依赖」提前 modulepreload，消除「先解析入口、再逐个发现依赖」的串行等待。
        全部为本地同源资源；离线时由 SW 从预缓存直接命中，零网络、零 404。
-       main 的 ?v= 与下方动态 import 完全一致，避免因 URL 不一致被当成两个模块重复下载。 -->
-  <link rel="modulepreload" crossorigin href="/assets/main-BDB-lJFa.js?v=9606408">
+       ⚠️ 关键：入口 URL 必须与各懒加载 chunk 内部的 `import './main-BDB-lJFa.js'` 解析结果【完全一致】。
+       ES 模块以「URL（含 query）」为键 —— 早前入口写成 `main-BDB-lJFa.js?v=9606408`，而 chunk 里是裸路径，
+       同一文件被解析成两个模块实例：Provider 在实例 A 渲染，chunk 里的 useContext 却在实例 B 里查 context，
+       于是抛 `useCustomIcons must be used within CustomIconProvider`，凡是引用 main 内 context/单例的 app 全部中招。
+       去掉 query 后全站只保留【一个】main 实例。 -->
+  <link rel="modulepreload" crossorigin href="/assets/main-BDB-lJFa.js">
   <link rel="modulepreload" crossorigin href="/assets/app-core-DDmh9wYw.js">
   <link rel="modulepreload" crossorigin href="/assets/vendor-react-Dqj4ggoj.js">
   <link rel="modulepreload" crossorigin href="/assets/vendor-dexie-KLdnSHz2.js">
@@ -1136,7 +1140,7 @@
         }
       } catch (_e) { /* SW 不可用不阻断启动 */ }
       try {
-        await import('/assets/main-BDB-lJFa.js?v=9606408');
+        await import('/assets/main-BDB-lJFa.js');
       } catch (_e) {
         console.error('[offline] 主模块加载失败', _e);
       }
@@ -1156,62 +1160,12 @@
     window.__NUOJIJI_OFFLINE_MODE__ = true;
     try { localStorage.removeItem('nuojiji_ota_pending'); } catch (_) {}
 
-    // 2) 外网请求短路：纯本地应用，一切指向站外的 fetch/XHR/beacon 立即失败，
-    //    避免等待不可达的厂商后端（账号/云同步/推送/统计等）造成启动与开内部 App 的卡顿。
-    //    仅拦截 http(s) 跨域请求；同源、blob:、data: 全部放行。
-    (function () {
-      try {
-        var origin = location.origin;
-        function isBlocked(input) {
-          var u = '';
-          try {
-            if (typeof input === 'string') u = input;
-            else if (input && input.url) u = input.url;
-            else if (input && typeof input.toString === 'function') u = input.toString();
-          } catch (_e) { return false; }
-          if (!u) return false;
-          var url;
-          try { url = new URL(u, origin); } catch (_e) { return false; }
-          if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
-          return url.origin !== origin;
-        }
-        if (window.fetch) {
-          var _fetch = window.fetch;
-          window.fetch = function (input, init) {
-            if (isBlocked(input)) return Promise.reject(new TypeError('offline-blocked-remote'));
-            return _fetch.apply(this, arguments);
-          };
-        }
-        if (window.XMLHttpRequest) {
-          var _open = XMLHttpRequest.prototype.open;
-          var _send = XMLHttpRequest.prototype.send;
-          XMLHttpRequest.prototype.open = function (method, url) {
-            try { this.__nuoBlocked = isBlocked(url); } catch (_e) { this.__nuoBlocked = false; }
-            return _open.apply(this, arguments);
-          };
-          XMLHttpRequest.prototype.send = function () {
-            if (this.__nuoBlocked) {
-              var xhr = this;
-              setTimeout(function () {
-                try {
-                  xhr.dispatchEvent(new ProgressEvent('error'));
-                  if (typeof xhr.onreadystatechange === 'function') xhr.onreadystatechange();
-                } catch (_e) {}
-              }, 0);
-              return;
-            }
-            return _send.apply(this, arguments);
-          };
-        }
-        if (navigator.sendBeacon) {
-          var _beacon = navigator.sendBeacon.bind(navigator);
-          navigator.sendBeacon = function (url) {
-            if (isBlocked(url)) return false;
-            return _beacon.apply(navigator, arguments);
-          };
-        }
-      } catch (_e) { /* 短路失败不影响启动 */ }
-    })();
+    // 2) 不再拦截外网请求。
+    //    此前版本把一切跨域 fetch/XHR/beacon 一律立即 reject（offline-blocked-remote），
+    //    结果把内部 App 依赖的远端数据（天气/时间、字体 CDN、doc 预览工具等）全部掐断，
+    //    导致「此时此刻」等 App 卡在「載入超時」、设置页报错 —— 属于「杀得太死」。
+    //    现改为完全不干预：请求照常发出，能达则用、不可达则由浏览器/业务自身降级，
+    //    恢复 App 原有行为。
   </script>
 <script>
     (function(){

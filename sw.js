@@ -1,6 +1,6 @@
 /* 糯嘰機 · 离线单机版 Service Worker（自动生成，勿手改） */
 /* 目标：全量预缓存本地静态资源（cache-first），断网后 App 及内部应用可秒开。 */
-const VERSION = 'nuojiji-offline-v2';
+const VERSION = 'nuojiji-offline-v4';
 const CACHE = VERSION;
 
 // 预缓存清单：本地全量静态资源
@@ -78,23 +78,33 @@ self.addEventListener('fetch', (event) => {
   // 跨域请求：交回浏览器默认处理（离线下自然快速失败）
   if (url.origin !== self.location.origin) return;
 
-  // 导航请求：cache-first（离线优先），未命中再联网并回填
+  // 导航请求：先按精确 URL 命中（覆盖 /preview-*.html、/privacy.html、/jili-embed.html 等真实页面），
+  // 未命中再回退 index.html（SPA 路由）。离线优先；联网时后台回填 index。
   if (req.mode === 'navigate') {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE);
-      const cached = await cache.match('/index.html') || await cache.match('/');
-      if (cached) {
-        // 后台静默更新 index（联网时）
-        fetch(req).then((res) => { if (res && res.ok) cache.put('/index.html', res.clone()); }).catch(() => {});
-        return cached;
+      // 1) 精确命中真实页面（含「无扩展名 → 补 .html」兜底，兼容 CF Pages 去后缀跳转）
+      const candidates = [url.pathname];
+      if (url.pathname !== '/' && !/\.[a-z0-9]+$/i.test(url.pathname)) candidates.push(url.pathname + '.html');
+      for (const p of candidates) {
+        const hit = await cache.match(url.origin + p);
+        if (hit) return hit;
       }
+      // 2) SPA 路由 → 回退到 index.html 外壳
+      const shell = await cache.match('/index.html') || await cache.match('/');
+      if (shell) {
+        if (url.pathname === '/' || url.pathname === '/index.html') {
+          // 仅对真正的主入口做联网回填，避免用预览页污染 index 缓存
+          fetch(req).then((res) => { if (res && res.ok) cache.put('/index.html', res.clone()); }).catch(() => {});
+        }
+        return shell;
+      }
+      // 3) 主壳也没缓存（首次离线）→ 尝试联网，失败给离线提示
       try {
         const res = await fetch(req);
         if (res && res.ok) cache.put('/index.html', res.clone());
         return res;
       } catch (_e) {
-        const offlinePage = await cache.match('/index.html');
-        if (offlinePage) return offlinePage;
         return new Response('<h1>离线，且无缓存</h1>', { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
       }
     })());
