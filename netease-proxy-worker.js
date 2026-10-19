@@ -109,11 +109,14 @@ export default {
       const headers = { ...CORS, "content-type": "application/json", Referer: "https://music.163.com/" };
       if (cookie) headers["cookie"] = cookie;
 
+      // QR routes must NEVER be cached at the edge or by the browser, otherwise
+      // a stale unikey is reused and the app sees an "instant-expired" QR.
+      const noCache = r.app === "/login/qr/key" || r.app === "/login/qr/check";
       let out;
       if (r.m === "GET") {
         const qs = r.q ? new URLSearchParams(r.q(u)).toString() : "";
         const full = NET + r.p + (qs ? "?" + qs : "");
-        out = await fetch(full, { headers, cf: { cacheTtl: 300 } });
+        out = await fetch(full, { headers, cf: noCache ? { cacheTtl: 0, noStore: true } : { cacheTtl: 300 } });
       } else {
         let body = {};
         try { body = await req.clone().json(); } catch (_) {}
@@ -122,13 +125,13 @@ export default {
           method: "POST",
           headers: { ...headers, "content-type": "application/json" },
           body: JSON.stringify(payload),
+          cf: noCache ? { cacheTtl: 0, noStore: true } : undefined,
         });
       }
       const text = await out.text();
-      return new Response(text, {
-        status: out.ok ? 200 : out.status,
-        headers: { ...CORS, "content-type": out.headers.get("content-type") || "application/json" },
-      });
+      const respHeaders = { ...CORS, "content-type": out.headers.get("content-type") || "application/json" };
+      if (noCache) respHeaders["cache-control"] = "no-store, max-age=0";
+      return new Response(text, { status: out.ok ? 200 : out.status, headers: respHeaders });
     }
 
     // Fallback: unknown app path → forward as /weapi passthrough

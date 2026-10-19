@@ -1157,7 +1157,7 @@
   //   lets you point it at your own worker without touching the app bundle.
   //   To deploy: replace the base URL with your own worker, then hard-refresh.
   //   If you don't set one, the app falls back to the author's (dead) worker.
-  var NETEASE_PROXY_BASE = '';  // ← paste your worker URL here, e.g. 'https://netease-proxy-yourname.workers.dev'
+  var NETEASE_PROXY_BASE = 'https://musiczhen.asuratang17.xyz';  // ← owner's own working NetEase proxy
   if (NETEASE_PROXY_BASE) {
     window.__NUO_NETEASE_PROXY = NETEASE_PROXY_BASE;
     if (!localStorage.getItem('nuoNeteaseProxy')) {
@@ -1291,7 +1291,7 @@
   }, 12000);
 })();
 
-  </script>
+</script>
   <script type="module">
     (async function () {
       try {
