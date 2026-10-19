@@ -1104,45 +1104,19 @@
     }
 
   </style>
-  <!-- 🔌 离线单机版 · 冷启动预热（L5）：
-       把主入口 chunk 及其「静态依赖」提前 modulepreload，消除「先解析入口、再逐个发现依赖」的串行等待。
-       全部为本地同源资源；离线时由 SW 从预缓存直接命中，零网络、零 404。
-       ⚠️ 关键：入口 URL 必须与各懒加载 chunk 内部的 `import './main-BDB-lJFa.js'` 解析结果【完全一致】。
-       ES 模块以「URL（含 query）」为键 —— 早前入口写成 `main-BDB-lJFa.js?v=9606408`，而 chunk 里是裸路径，
-       同一文件被解析成两个模块实例：Provider 在实例 A 渲染，chunk 里的 useContext 却在实例 B 里查 context，
-       于是抛 `useCustomIcons must be used within CustomIconProvider`，凡是引用 main 内 context/单例的 app 全部中招。
-       去掉 query 后全站只保留【一个】main 实例。 -->
-  <link rel="modulepreload" crossorigin href="/assets/main-BDB-lJFa.js">
-  <link rel="modulepreload" crossorigin href="/assets/app-core-DDmh9wYw.js">
-  <link rel="modulepreload" crossorigin href="/assets/vendor-react-Dqj4ggoj.js">
-  <link rel="modulepreload" crossorigin href="/assets/vendor-dexie-KLdnSHz2.js">
-  <link rel="modulepreload" crossorigin href="/assets/vendor-lucide-BTP96YLz.js">
-  <link rel="modulepreload" crossorigin href="/assets/vendor-crypto-CUtotGuE.js">
-  <link rel="modulepreload" crossorigin href="/assets/vendor-supabase-Bcpm_8qV.js">
-  <link rel="modulepreload" crossorigin href="/assets/downloadToast-DJcl0FcJ.js">
-  <link rel="modulepreload" crossorigin href="/assets/messagingCssScope-BogCy_Fn.js">
-  <link rel="modulepreload" crossorigin href="/assets/modulepreload-polyfill-YP0FEG5d.js">
+  <!-- 应用启动：加载主模块。
+       纯联网版：不注册、不依赖任何 Service Worker（离线层已整体移除）。
+       ⚠️ 入口 URL 必须与各懒加载 chunk 内部的 `import './main-BDB-lJFa.js'` 解析结果【完全一致】。
+       ES 模块以「URL（含 query）」为键：若入口写成 `main-BDB-lJFa.js?v=…` 而 chunk 是裸路径，
+       同一文件会被解析成两个模块实例，Provider 与 chunk 里的 useContext 分属不同实例，
+       于是抛 `useCustomIcons must be used within CustomIconProvider` 之类的 context 错误（167 个 chunk 受影响）。
+       故此处使用【裸路径】。 -->
   <script type="module">
-    // 离线单机版启动：
-    //   1) 注册离线优先 Service Worker（全量预缓存本地资源，断网可秒开内部 App）
-    //   2) 加载应用主模块
-    // ⚠️ 不再注销 SW / 清空 Cache Storage —— 那是「在线镜像」防止旧缓存的自救动作，
-    //    在离线单机场景会彻底破坏离线能力，故移除。
     (async function () {
-      // ⚠️ 不阻塞启动：SW 注册/预热全部放后台，绝不 await ready（首次安装要下全量资源）
-      try {
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(function (reg) {
-            navigator.serviceWorker.ready.then(function (r) {
-              if (r && r.active) r.active.postMessage({ type: 'WARMUP' });
-            }).catch(function () {});
-          }).catch(function () {});
-        }
-      } catch (_e) { /* SW 不可用不阻断启动 */ }
       try {
         await import('/assets/main-BDB-lJFa.js');
       } catch (_e) {
-        console.error('[offline] 主模块加载失败', _e);
+        console.error('[boot] 主模块加载失败', _e);
       }
     })();
   </script>
@@ -1154,18 +1128,9 @@
 
 
   <script>
-    // ── 离线单机版 ──
-    // 1) 冻结厂商 OTA / 更新机制，标记离线模式（供启动看门狗识别，避免误清离线缓存）
+    // Static archaeology mirror: freeze vendor update/cache machinery.
     window.__NUOJIJI_REFERENCE_MIRROR__ = true;
-    window.__NUOJIJI_OFFLINE_MODE__ = true;
     try { localStorage.removeItem('nuojiji_ota_pending'); } catch (_) {}
-
-    // 2) 不再拦截外网请求。
-    //    此前版本把一切跨域 fetch/XHR/beacon 一律立即 reject（offline-blocked-remote），
-    //    结果把内部 App 依赖的远端数据（天气/时间、字体 CDN、doc 预览工具等）全部掐断，
-    //    导致「此时此刻」等 App 卡在「載入超時」、设置页报错 —— 属于「杀得太死」。
-    //    现改为完全不干预：请求照常发出，能达则用、不可达则由浏览器/业务自身降级，
-    //    恢复 App 原有行为。
   </script>
 <script>
     (function(){
@@ -1675,8 +1640,6 @@
             };
             if (!escalate) { go(); return; }
             window.setTimeout(go, 8000);   // 安全網：清理卡住也一定會重載
-            // 🔌 离线单机版：不注销 SW、不清缓存，直接重载即可（保护全量离线预缓存）
-            if (window.__NUOJIJI_OFFLINE_MODE__) { go(); return; }
             Promise.all([
               (function () {
                 if (!('serviceWorker' in navigator)) return Promise.resolve();
@@ -1775,8 +1738,6 @@
         window.setTimeout(doReload, 15000);
 
         var unregisterSW = function () {
-          // 🔌 离线单机版：绝不注销 SW，否则离线能力与全量预缓存都失效
-          if (window.__NUOJIJI_OFFLINE_MODE__) return Promise.resolve();
           if (!('serviceWorker' in navigator)) return Promise.resolve();
           return navigator.serviceWorker.getRegistrations().then(function (regs) {
             return Promise.all(regs.map(function (r) {
@@ -1785,8 +1746,6 @@
           }).catch(function () { });
         };
         var clearCaches = function () {
-          // 🔌 离线单机版：绝不清空 Cache Storage，保护离线预缓存不被误删
-          if (window.__NUOJIJI_OFFLINE_MODE__) return Promise.resolve();
           if (!('caches' in window)) return Promise.resolve();
           return caches.keys().then(function (names) {
             return Promise.all(names.map(function (n) {
@@ -1961,8 +1920,6 @@
       //   抓回來後用 content-length 對一次位元組數，確認這回不是半截；不合就再抓一次。
       //   全程失敗一律吞掉，回退到既有的注入 → silentRecover 鏈，零回歸。
       function healAsset(src) {
-        // 🔌 离线单机版：不 purge 缓存、也无需走网络重抓（离线本就没有网络残档问题）
-        if (window.__NUOJIJI_OFFLINE_MODE__) return Promise.resolve('offline-skip');
         var abs;
         try { abs = new URL(src, window.location.href).href; } catch (_e) { return Promise.resolve(''); }
         var corrupt = [];
