@@ -1111,6 +1111,111 @@
        同一文件会被解析成两个模块实例，Provider 与 chunk 里的 useContext 分属不同实例，
        于是抛 `useCustomIcons must be used within CustomIconProvider` 之类的 context 错误（167 个 chunk 受影响）。
        故此处使用【裸路径】。 -->
+  <script data-nuo-offline-layer="__NUO_OFFLINE_LAYER__">
+// Nuo personal mirror — surgical offline interceptor (ORIGINAL, single-user).
+//
+// Design goal: keep EVERY real endpoint live so the owner's own integrations
+// (MCP hotsearch, NetEase Cloud Music proxy, OpenAI / MiniMax / ElevenLabs /
+// DeepL / Bilibili / GitHub / Supabase ... all keyed by the user) keep working.
+// We only neutralize the ONE thing that destabilizes the frozen mirror:
+// the vendor OTA version.json check, which would otherwise compare against a
+// live "newer" build and trigger install / migration / auto-reload nags.
+//
+// Stubbed (ONLY):  assets.nuojiji.app/ota/version.json  ->  { version: '6.9.89' }
+//   (Yp() reads .version, qp() compares to vp='6.9.89' => 0 => reason 'none',
+//    so no update prompt, no reload, app stays pinned to the frozen build.)
+//
+// Passthrough (real network, user's keys):
+//   - *.workers.dev            (MCP hotsearch, NetEase proxy stream, push/MCP)
+//   - pb.nuojiji.app / *.supabase.co (vendor cloud sync + auth-refresh)
+//   - upload.nuojiji.app       (attachment upload)
+//   - community.nuojiji.app / nuojijiland.pages.dev
+//   - every third-party AI / media / search API
+//
+// Injected as a plain <script> in <head> BEFORE the app module script, so it
+// wraps window.fetch first. No application logic is rewritten.
+// A 12s boot-overlay backstop is kept as a safety net (fires only if React
+// has mounted but the decorative overlay is somehow still covering the UI).
+(function () {
+  'use strict';
+  if (window.__NUO_OFFLINE__) return;
+  window.__NUO_OFFLINE__ = true;
+
+  var CURRENT = '6.9.89';
+
+  // Surgical rule set: OTA only. Anything not matched passes through untouched.
+  var RULES = [
+    { re: /assets\.nuojiji\.app\/ota\/version\.json/i, kind: 'ota' },
+  ];
+
+  function urlOf(input) {
+    try {
+      if (typeof input === 'string') return input;
+      if (input && input.url) return String(input.url);
+      if (input && input instanceof URL) return String(input);
+      return String(input || '');
+    } catch (e) { return ''; }
+  }
+
+  function ruleFor(u) {
+    for (var i = 0; i < RULES.length; i++) if (RULES[i].re.test(u)) return RULES[i];
+    return null;
+  }
+
+  function otaBody() {
+    // "Already up to date": pin to the frozen version so no update/reload nag.
+    return { version: CURRENT, released: '2026.10.01', note: 'up-to-date' };
+  }
+
+  function mockResponse(kind) {
+    var body = JSON.stringify(kind === 'ota' ? otaBody() : {});
+    var headers = new Headers([
+      ['content-type', 'application/json'],
+      ['access-control-allow-origin', '*'],
+      ['cache-control', 'no-store'],
+    ]);
+    return new Response(body, { status: 200, statusText: 'OK', headers: headers });
+  }
+
+  var ofetch = window.fetch ? window.fetch.bind(window) : null;
+  if (ofetch) {
+    window.fetch = function (input, init) {
+      var u = urlOf(input);
+      var rule = ruleFor(u);
+      if (rule) {
+        try { console.info('[NuoMirror] pin OTA version.json -> current', u.slice(0, 80)); } catch (e) {}
+        var resp = mockResponse(rule.kind);
+        return new Promise(function (res) { setTimeout(function () { res(resp); }, 5); });
+      }
+      // Everything else: real network (user's keys live here).
+      return ofetch(input, init);
+    };
+  }
+
+  // Boot backstop: reveal the mounted app if the decorative overlay is still up.
+  // Only fires when React has content AND the overlay is still visible; harmless
+  // otherwise. Never forces anything when boot succeeded normally.
+  function forceBootReveal() {
+    try {
+      if (window.__nuojijiForceRemoveLoadingOverlay) {
+        window.__nuojijiForceRemoveLoadingOverlay('mirror-app-ready');
+        return;
+      }
+      var ov = document.getElementById('app-loading-overlay');
+      if (ov) ov.style.display = 'none';
+      if (document.body.classList.contains('app-loading')) document.body.classList.remove('app-loading');
+    } catch (e) {}
+  }
+  setTimeout(function () {
+    var root = document.getElementById('nuo-os-root') || document.getElementById('root');
+    if (root && root.children && root.children.length) {
+      var ov = document.getElementById('app-loading-overlay');
+      if (ov && ov.offsetParent !== null) forceBootReveal();
+    }
+  }, 12000);
+})();
+
+  </script>
   <script type="module">
     (async function () {
       try {

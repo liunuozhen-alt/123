@@ -51,28 +51,29 @@
 #
 # 由於上方已把 XFO + CSP 從 /* 全局移除，預覽頁這裡只需設置白名單 CSP，
 # 不會再有「兩條 CSP 取交集」的污染。
-# ⚠️ TODO 上線後刪除 localhost 兩條
+# 預覽頁（/preview-*）：需放行跨域 iframe 嵌入（論壇 / land 分享美化代碼預覽）
+# 注意 CF Pages 會把 .html 後綴 308 到無後綴，所以兩條都要寫
 /preview-chat
   Cache-Control: public, max-age=600, must-revalidate
-  Content-Security-Policy: frame-ancestors 'self' https://community.nuojiji.app https://nuojijiland.pages.dev http://localhost:5180 http://localhost:5181
+  Content-Security-Policy: frame-ancestors 'self' https://community.nuojiji.app https://nuojijiland.pages.dev
 /preview-chat.html
   Cache-Control: public, max-age=600, must-revalidate
-  Content-Security-Policy: frame-ancestors 'self' https://community.nuojiji.app https://nuojijiland.pages.dev http://localhost:5180 http://localhost:5181
+  Content-Security-Policy: frame-ancestors 'self' https://community.nuojiji.app https://nuojijiland.pages.dev
 /preview-tm
   Cache-Control: public, max-age=600, must-revalidate
-  Content-Security-Policy: frame-ancestors 'self' https://community.nuojiji.app https://nuojijiland.pages.dev http://localhost:5180 http://localhost:5181
+  Content-Security-Policy: frame-ancestors 'self' https://community.nuojiji.app https://nuojijiland.pages.dev
 /preview-tm.html
   Cache-Control: public, max-age=600, must-revalidate
-  Content-Security-Policy: frame-ancestors 'self' https://community.nuojiji.app https://nuojijiland.pages.dev http://localhost:5180 http://localhost:5181
+  Content-Security-Policy: frame-ancestors 'self' https://community.nuojiji.app https://nuojijiland.pages.dev
 /preview-xinsheng
   Cache-Control: public, max-age=600, must-revalidate
-  Content-Security-Policy: frame-ancestors 'self' https://community.nuojiji.app https://nuojijiland.pages.dev http://localhost:5180 http://localhost:5181
+  Content-Security-Policy: frame-ancestors 'self' https://community.nuojiji.app https://nuojijiland.pages.dev
 /preview-xinsheng.html
   Cache-Control: public, max-age=600, must-revalidate
-  Content-Security-Policy: frame-ancestors 'self' https://community.nuojiji.app https://nuojijiland.pages.dev http://localhost:5180 http://localhost:5181
+  Content-Security-Policy: frame-ancestors 'self' https://community.nuojiji.app https://nuojijiland.pages.dev
 /preview-notif
   Cache-Control: public, max-age=600, must-revalidate
-  Content-Security-Policy: frame-ancestors 'self' https://community.nuojiji.app https://nuojijiland.pages.dev http://localhost:5180 http://localhost:5181
+  Content-Security-Policy: frame-ancestors 'self' https://community.nuojiji.app https://nuojijiland.pages.dev
 /preview-notif.html
   Cache-Control: public, max-age=600, must-revalidate
-  Content-Security-Policy: frame-ancestors 'self' https://community.nuojiji.app https://nuojijiland.pages.dev http://localhost:5180 http://localhost:5181
+  Content-Security-Policy: frame-ancestors 'self' https://community.nuojiji.app https://nuojijiland.pages.dev
