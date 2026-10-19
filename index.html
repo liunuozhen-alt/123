@@ -1289,6 +1289,97 @@
       if (ov && ov.offsetParent !== null) forceBootReveal();
     }
   }, 12000);
+
+  // ── 5. QR Proxy Diagnostic Probe ─────────────────────────────────────────
+  // On load, probe the NetEase proxy's QR key/check routes so we can tell
+  // EXACTLY which route works and what shape the response has. Log with
+  // [NuoQR] prefix; also persist the winning route + raw sample to localStorage.
+  (async function NuoQRProbe() {
+    var base = (window.__NUO_NETEASE_PROXY || '').replace(/\/+$/, '');
+    if (!base) { console.warn('[NuoQR] No proxy base configured — skipping probe'); return; }
+    console.info('[NuoQR] ==== QR probe start ==== base=', base);
+    var keyRoutes = [
+      '/login/qr/key',            // app/author worker contract
+      '/api/login/qrcode',        // NeteaseCloudMusicApi
+      '/login/qrcode/create',     // NeteaseCloudMusicApi (POST)
+      '/qrcode'
+    ];
+    var checkRoutes = [
+      '/login/qr/check',          // app/author worker contract
+      '/api/login/qrcode/check',  // NeteaseCloudMusicApi
+      '/login/qrcode/check'
+    ];
+    var gotUnikey = null, gotKeyRoute = null, sampleKey = null;
+    for (var i = 0; i < keyRoutes.length; i++) {
+      var kr = keyRoutes[i];
+      var isPost = kr === '/login/qrcode/create';
+      try {
+        var url = base + kr + (isPost ? '?key=1&type=1' : '') + '&_cb=' + Math.floor(Math.random() * 1e9);
+        var opts = isPost ? { method: 'POST', headers: { 'Content-Type': 'application/json' } } : {};
+        var t0 = Date.now();
+        var resp = await fetch(url, opts);
+        var ms = Date.now() - t0;
+        var body = await resp.text();
+        console.info('[NuoQR] ' + (isPost ? 'POST' : 'GET') + ' ' + kr + ' -> HTTP ' + resp.status + ' (' + ms + 'ms)');
+        console.info('[NuoQR]   body=' + body.slice(0, 500));
+        var j = null; try { j = JSON.parse(body); } catch (_) {}
+        if (resp.ok && j && typeof j === 'object') {
+          var uni = j.unikey || (j.data && (j.data.unikey || j.data.qrcode_key || j.data.qrcodekey || j.data.key)) || j.qrcode_key || j.qrcodekey || j.key || null;
+          if (uni) {
+            gotUnikey = uni; gotKeyRoute = kr; sampleKey = j;
+            console.info('[NuoQR] \u2713 unikey found at', kr, '=', String(uni).slice(0, 20) + '\u2026');
+            try { localStorage.setItem('nuoQrKeyRoute', kr); } catch (_) {}
+            break;
+          } else {
+            console.warn('[NuoQR]   no unikey field in response — keys present: ' + Object.keys(j).join(','));
+          }
+        }
+      } catch (e) {
+        console.warn('[NuoQR] ' + kr + ' fetch error:', e.message);
+      }
+    }
+
+    // Now probe check with the unikey (or a dummy) to learn the check contract.
+    var probeKey = gotUnikey || '__PROBE_KEY__';
+    for (var ci = 0; ci < checkRoutes.length; ci++) {
+      var cr = checkRoutes[ci];
+      try {
+        var cUrl = base + cr + '?key=' + encodeURIComponent(probeKey) + '&qrcodekey=' + encodeURIComponent(probeKey) + '&_cb=' + Math.floor(Math.random() * 1e9);
+        var cResp = await fetch(cUrl);
+        var cBody = await cResp.text();
+        var cJ = null; try { cJ = JSON.parse(cBody); } catch (_) {}
+        console.info('[NuoQR] check ' + cr + ' -> HTTP ' + cResp.status + ' body=' + cBody.slice(0, 500));
+        if (cResp.ok && cJ && typeof cJ === 'object') {
+          var hasCode = cJ.code !== undefined;
+          var codeVal = cJ.code;
+          var hasDataCookie = cJ.data && cJ.data.cookie !== undefined;
+          console.info('[NuoQR]   check code=' + codeVal + ' (present=' + hasCode + ') data.cookie present=' + !!hasDataCookie + ' data keys=' + (cJ.data ? Object.keys(cJ.data).join(',') : 'n/a'));
+          // Store the first check route that returns a JSON object with a code OR data.cookie
+          if (hasCode || hasDataCookie || (cJ.data && cJ.data.qrcode_key)) {
+            try { localStorage.setItem('nuoQrCheckRoute', cr); } catch (_) {}
+            console.info('[NuoQR] \u2713 check route locked:', cr);
+            break;
+          }
+        }
+      } catch (e) {
+        console.warn('[NuoQR] check ' + cr + ' fetch error:', e.message);
+      }
+    }
+
+    // Persist a compact report so the user can send it to us even without console.
+    try {
+      localStorage.setItem('nuoQrProbeReport', JSON.stringify({
+        ts: new Date().toISOString(),
+        base: base,
+        keyRoute: gotKeyRoute,
+        hasUnikey: !!gotUnikey,
+        sampleKey: sampleKey,
+      }));
+      console.info('[NuoQR] ==== QR probe done ==== keyRoute=' + gotKeyRoute + ' hasUnikey=' + !!gotUnikey);
+      console.info('[NuoQR] To send us the diagnostic, copy: ' + localStorage.getItem('nuoQrProbeReport'));
+    } catch (_) {}
+  })();
+
 })();
 
 </script>

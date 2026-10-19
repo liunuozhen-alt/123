@@ -101,3 +101,24 @@ powershell -NoProfile -Command "Compress-Archive -LiteralPath ./* -DestinationPa
 - 这是**单用户自用镜像**，勿公开发布：它绕过厂商登录/域校验，并保留对 `pb.nuojiji.app`、`*.supabase.co`、`*.workers.dev` 的直连（里面带你的 API key）。
 - 你的三方 key 存在浏览器 localStorage（`nuo.*` 前缀），请只在信任的设备上登录。
 - 镜像不含厂商源码，所有补丁/拦截层为原创；勿再转发厂商原始 bundle。
+
+
+## 二维码"已过期"修复（2026-09-22）
+
+**症状**：打开网易云，二维码只显示"已过期"，从未成功登录。
+
+**根因**（两层）：
+1. **App 侧**：`RadioScreen-Cr1LKrRd.js` 中，若 QR check 在生成后 <15s 内返回 code 800（过期），代码故意跳过自动刷新，直接显示 `F8('expired')`。代理若返回 stale unikey，第一次 check 就 <15s 报过期，App 不会自愈。
+2. **Worker 侧**：`netease-proxy-worker.js` 原实现对所有路由统一 `cacheTtl:300`，QR key/check 被 Cloudflare 边缘缓存，导致多个用户/多次打开复用同一已失效的 unikey。
+
+**修复**：
+- `RadioScreen-Cr1LKrRd.js`：移除 <15s 禁重试门槛，QR 自动刷新上限从 3 次提升到 10 次。即便代理先给了旧 key，App 也会自动换到新鲜 key。
+- `netease-proxy-worker.js`：`/login/qr/key` 和 `/login/qr/check` 路由显式 `cf: { cacheTtl:0, noStore:true }` + `Cache-Control: no-store, max-age=0`，保证每次都是全新 unikey。
+
+**重新部署步骤**：
+```bash
+wrangler deploy netease-proxy-worker.js   # 重新部署 worker
+```
+Cloudflare Pages 侧直接重新上传 `doorkicker-mirror-v6.9.89-netease.zip` 即可。
+
+**验证**：打开网易云 → 应该看到全新二维码（非"已过期"）→ 手机扫码 → 登录后状态持久化。
