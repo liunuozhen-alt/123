@@ -1112,18 +1112,24 @@
        于是抛 `useCustomIcons must be used within CustomIconProvider` 之类的 context 错误（167 个 chunk 受影响）。
        故此处使用【裸路径】。 -->
   <script data-nuo-offline-layer="__NUO_OFFLINE_LAYER__">
-// Nuo personal mirror — surgical offline interceptor (ORIGINAL, single-user).
+// Nuo personal mirror — surgical offline interceptor + local-user bootstrap.
 //
 // Design goal: keep EVERY real endpoint live so the owner's own integrations
 // (MCP hotsearch, NetEase Cloud Music proxy, OpenAI / MiniMax / ElevenLabs /
 // DeepL / Bilibili / GitHub / Supabase ... all keyed by the user) keep working.
-// We only neutralize the ONE thing that destabilizes the frozen mirror:
-// the vendor OTA version.json check, which would otherwise compare against a
-// live "newer" build and trigger install / migration / auto-reload nags.
 //
 // Stubbed (ONLY):  assets.nuojiji.app/ota/version.json  ->  { version: '6.9.89' }
-//   (Yp() reads .version, qp() compares to vp='6.9.89' => 0 => reason 'none',
-//    so no update prompt, no reload, app stays pinned to the frozen build.)
+//   Yp() reads .version, qp() compares to vp='6.9.89' => 0 => reason 'none',
+//   so no update prompt, no reload, app stays pinned to the frozen build.
+//
+// Seeded before app module:
+//   - nuojiji_current_profile_user_id  (stable local userId anchor)
+//   - nuojiji_profile_users            (minimal profile record)
+//
+//   Without a userId, MemoryPalace / ThisMoment / Chat / Settings and all
+//   other data-heavy screens hit `if(!userId) return;` early, leaving their
+//   loading spinners active forever.  Seeding here is a no-op when a valid
+//   userId already exists (e.g., the user logged in on a previous session).
 //
 // Passthrough (real network, user's keys):
 //   - *.workers.dev            (MCP hotsearch, NetEase proxy stream, push/MCP)
@@ -1133,9 +1139,7 @@
 //   - every third-party AI / media / search API
 //
 // Injected as a plain <script> in <head> BEFORE the app module script, so it
-// wraps window.fetch first. No application logic is rewritten.
-// A 12s boot-overlay backstop is kept as a safety net (fires only if React
-// has mounted but the decorative overlay is somehow still covering the UI).
+// wraps window.fetch first and seeds localStorage before React mounts.
 (function () {
   'use strict';
   if (window.__NUO_OFFLINE__) return;
@@ -1143,7 +1147,30 @@
 
   var CURRENT = '6.9.89';
 
-  // Surgical rule set: OTA only. Anything not matched passes through untouched.
+  // ── 1. Seed local userId so data-heavy features can anchor Dexie queries ──
+  (function seedLocalUser() {
+    var UID_KEY = 'nuojiji_current_profile_user_id';
+    var PU_KEY  = 'nuojiji_profile_users';
+    try {
+      var uid = localStorage.getItem(UID_KEY);
+      if (!uid) {
+        uid = 'mirror_local_' + Math.random().toString(36).slice(2, 10);
+        localStorage.setItem(UID_KEY, uid);
+        console.info('[NuoMirror] seeded userId =', uid);
+      }
+      // Seed profileUsers if the array is empty or missing
+      var pu = null;
+      try { pu = JSON.parse(localStorage.getItem(PU_KEY) || '[]'); } catch (_) {}
+      if (!Array.isArray(pu) || pu.length === 0) {
+        localStorage.setItem(PU_KEY, JSON.stringify([
+          { uid: uid, name: '鏡像', avatar: null, createdAt: Date.now() }
+        ]));
+        console.info('[NuoMirror] seeded profileUsers');
+      }
+    } catch (_) {}
+  })();
+
+  // ── 2. Surgical fetch interceptor: OTA only, everything else passthrough ──
   var RULES = [
     { re: /assets\.nuojiji\.app\/ota\/version\.json/i, kind: 'ota' },
   ];
@@ -1163,7 +1190,6 @@
   }
 
   function otaBody() {
-    // "Already up to date": pin to the frozen version so no update/reload nag.
     return { version: CURRENT, released: '2026.10.01', note: 'up-to-date' };
   }
 
@@ -1187,14 +1213,11 @@
         var resp = mockResponse(rule.kind);
         return new Promise(function (res) { setTimeout(function () { res(resp); }, 5); });
       }
-      // Everything else: real network (user's keys live here).
       return ofetch(input, init);
     };
   }
 
-  // Boot backstop: reveal the mounted app if the decorative overlay is still up.
-  // Only fires when React has content AND the overlay is still visible; harmless
-  // otherwise. Never forces anything when boot succeeded normally.
+  // ── 3. Boot overlay backstop (12 s, only fires when app is mounted) ─────
   function forceBootReveal() {
     try {
       if (window.__nuojijiForceRemoveLoadingOverlay) {
