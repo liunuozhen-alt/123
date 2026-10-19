@@ -1122,55 +1122,54 @@
 //   Yp() reads .version, qp() compares to vp='6.9.89' => 0 => reason 'none',
 //   so no update prompt, no reload, app stays pinned to the frozen build.
 //
-// Seeded before app module:
-//   - nuojiji_current_profile_user_id  (stable local userId anchor)
-//   - nuojiji_profile_users            (minimal profile record)
-//
-//   Without a userId, MemoryPalace / ThisMoment / Chat / Settings and all
-//   other data-heavy screens hit `if(!userId) return;` early, leaving their
-//   loading spinners active forever.  Seeding here is a no-op when a valid
-//   userId already exists (e.g., the user logged in on a previous session).
+// WHY a local user must be seeded (the real blocker):
+//   The app anchors every data-heavy feature (Memory Palace, This Moment,
+//   Chat, ...) to a `userId`. That userId is NOT read from localStorage —
+//   it is read from the app's IndexedDB (NuojijiStructuredDB):
+//       profileUsers         <- `users` store         (Ic.getAll() -> E.users)
+//       currentProfileUserId <- `globalSettings` store (bm.get(key) -> E.globalSettings)
+//   With no logged-in vendor account, both are empty, so each screen's
+//   `useEffect` hits `if (!userId) return;` and never clears its spinner.
+//   Fix: seed BOTH the `users` store (one row) AND the `globalSettings` store
+//   (`nuojiji_current_profile_user_id` = that row's uid) directly into IndexedDB,
+//   after the app has created/upgraded the DB (so we never conflict on version).
+//   localStorage mirrors are kept too (harmless, and picked up by legacy paths).
 //
 // Passthrough (real network, user's keys):
-//   - *.workers.dev            (MCP hotsearch, NetEase proxy stream, push/MCP)
-//   - pb.nuojiji.app / *.supabase.co (vendor cloud sync + auth-refresh)
-//   - upload.nuojiji.app       (attachment upload)
-//   - community.nuojiji.app / nuojijiland.pages.dev
-//   - every third-party AI / media / search API
+//   - *.workers.dev (MCP hotsearch, NetEase proxy stream, push)  - live
+//   - pb.nuojiji.app / *.supabase.co (cloud sync, auth-refresh)  - live
+//   - upload.nuojiji.app / community / every third-party API     - live
 //
-// Injected as a plain <script> in <head> BEFORE the app module script, so it
-// wraps window.fetch first and seeds localStorage before React mounts.
+// Injected as a plain <script> in <head> BEFORE the app module script.
 (function () {
   'use strict';
   if (window.__NUO_OFFLINE__) return;
   window.__NUO_OFFLINE__ = true;
 
   var CURRENT = '6.9.89';
+  var UID_KEY = 'nuojiji_current_profile_user_id';
+  var PU_KEY  = 'nuojiji_profile_users';
+  var DB_NAME = 'NuojijiStructuredDB';
 
-  // ── 1. Seed local userId so data-heavy features can anchor Dexie queries ──
-  (function seedLocalUser() {
-    var UID_KEY = 'nuojiji_current_profile_user_id';
-    var PU_KEY  = 'nuojiji_profile_users';
-    try {
-      var uid = localStorage.getItem(UID_KEY);
-      if (!uid) {
-        uid = 'mirror_local_' + Math.random().toString(36).slice(2, 10);
-        localStorage.setItem(UID_KEY, uid);
-        console.info('[NuoMirror] seeded userId =', uid);
-      }
-      // Seed profileUsers if the array is empty or missing
-      var pu = null;
-      try { pu = JSON.parse(localStorage.getItem(PU_KEY) || '[]'); } catch (_) {}
-      if (!Array.isArray(pu) || pu.length === 0) {
-        localStorage.setItem(PU_KEY, JSON.stringify([
-          { uid: uid, name: '鏡像', avatar: null, createdAt: Date.now() }
-        ]));
-        console.info('[NuoMirror] seeded profileUsers');
-      }
-    } catch (_) {}
-  })();
+  // ── 1. Stable local userId; seed localStorage (mirror, legacy-safe) ──────
+  var uid;
+  try {
+    uid = localStorage.getItem(UID_KEY);
+    if (!uid) {
+      uid = 'mirror_local_' + Math.random().toString(36).slice(2, 10);
+      localStorage.setItem(UID_KEY, uid);
+      console.info('[NuoMirror] seeded userId (localStorage) =', uid);
+    }
+    var pu = null;
+    try { pu = JSON.parse(localStorage.getItem(PU_KEY) || '[]'); } catch (_) {}
+    if (!Array.isArray(pu) || pu.length === 0) {
+      localStorage.setItem(PU_KEY, JSON.stringify([
+        { uid: uid, name: 'Mirror', avatar: null, createdAt: Date.now() }
+      ]));
+    }
+  } catch (_) {}
 
-  // ── 2. Surgical fetch interceptor: OTA only, everything else passthrough ──
+  // ── 2. Surgical fetch interceptor: OTA only, everything else passthrough ─
   var RULES = [
     { re: /assets\.nuojiji\.app\/ota\/version\.json/i, kind: 'ota' },
   ];
@@ -1179,30 +1178,17 @@
     try {
       if (typeof input === 'string') return input;
       if (input && input.url) return String(input.url);
-      if (input && input instanceof URL) return String(input);
+      if (typeof URL !== 'undefined' && input instanceof URL) return String(input);
       return String(input || '');
     } catch (e) { return ''; }
   }
-
-  function ruleFor(u) {
-    for (var i = 0; i < RULES.length; i++) if (RULES[i].re.test(u)) return RULES[i];
-    return null;
-  }
-
-  function otaBody() {
-    return { version: CURRENT, released: '2026.10.01', note: 'up-to-date' };
-  }
-
+  function ruleFor(u) { for (var i = 0; i < RULES.length; i++) if (RULES[i].re.test(u)) return RULES[i]; return null; }
+  function otaBody() { return { version: CURRENT, released: '2026.10.01', note: 'up-to-date' }; }
   function mockResponse(kind) {
     var body = JSON.stringify(kind === 'ota' ? otaBody() : {});
-    var headers = new Headers([
-      ['content-type', 'application/json'],
-      ['access-control-allow-origin', '*'],
-      ['cache-control', 'no-store'],
-    ]);
-    return new Response(body, { status: 200, statusText: 'OK', headers: headers });
+    var h = new Headers([['content-type', 'application/json'], ['access-control-allow-origin', '*'], ['cache-control', 'no-store']]);
+    return new Response(body, { status: 200, statusText: 'OK', headers: h });
   }
-
   var ofetch = window.fetch ? window.fetch.bind(window) : null;
   if (ofetch) {
     window.fetch = function (input, init) {
@@ -1217,7 +1203,60 @@
     };
   }
 
-  // ── 3. Boot overlay backstop (12 s, only fires when app is mounted) ─────
+  // ── 3. Seed IndexedDB (the store the app ACTUALLY reads) ─────────────────
+  // Wait until the app has created + upgraded NuojijiStructuredDB (all stores
+  // present), then open it WITHOUT a version (so no versionchange conflict)
+  // and write one user row + the current-profile-user pointer.
+  (async function seedIdb() {
+    if (typeof indexedDB === 'undefined' || !uid || !indexedDB.databases) return;
+    var db = null;
+    for (var attempt = 0; attempt < 160; attempt++) { // ~24s
+      try {
+        var dbs = await indexedDB.databases();
+        if (dbs.some(function (d) { return d.name === DB_NAME; })) {
+          db = await new Promise(function (res, rej) {
+            var rq = indexedDB.open(DB_NAME); // no version -> keep app's
+            rq.onsuccess = function () { res(rq.result); };
+            rq.onerror = function () { rej(rq.error); };
+          });
+          break;
+        }
+      } catch (e) { /* keep waiting for app to create it */ }
+      await new Promise(function (r) { setTimeout(r, 150); });
+    }
+    if (!db) { console.warn('[NuoMirror] IDB seed: DB never appeared'); return; }
+
+    try {
+      var stores = Array.from(db.objectStoreNames);
+      var wanted = [];
+      if (stores.indexOf('users') >= 0) wanted.push('users');
+      if (stores.indexOf('globalSettings') >= 0) wanted.push('globalSettings');
+      if (!wanted.length) { console.warn('[NuoMirror] IDB seed: users/globalSettings not ready yet'); return; }
+
+      var tx = db.transaction(wanted, 'readwrite');
+      tx.oncomplete = function () {
+        console.info('[NuoMirror] IDB seed complete (users + current_profile_user_id)');
+        try { window.dispatchEvent(new CustomEvent('profile-user-switched', { detail: { userId: uid } })); } catch (e) {}
+      };
+      tx.onerror = function () { console.warn('[NuoMirror] IDB seed tx error:', tx.error && tx.error.message); };
+
+      if (wanted.indexOf('users') >= 0) {
+        var uos = tx.objectStore('users');
+        var cReq = uos.count();
+        cReq.onsuccess = function () {
+          if (cReq.result === 0) {
+            uos.add({ uid: uid, name: 'Mirror', avatar: null, createdAt: Date.now(), _mirrorSeeded: true });
+          }
+        };
+      }
+      if (wanted.indexOf('globalSettings') >= 0) {
+        var gos = tx.objectStore('globalSettings');
+        gos.put({ key: UID_KEY, value: uid });
+      }
+    } catch (e) { console.warn('[NuoMirror] IDB seed failed:', e && e.message); }
+  })();
+
+  // ── 4. Boot overlay backstop (12 s, only when app actually mounted) ──────
   function forceBootReveal() {
     try {
       if (window.__nuojijiForceRemoveLoadingOverlay) {
