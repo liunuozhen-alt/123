@@ -1151,6 +1151,20 @@
   var PU_KEY  = 'nuojiji_profile_users';
   var DB_NAME = 'NuojijiStructuredDB';
 
+  // ── 0. NetEase proxy base override (owner's own Cloudflare Worker) ─────
+  //   The app's neteaseService-BRiOs1ds.js reads window.__NUO_NETEASE_PROXY
+  //   (or localStorage 'nuoNeteaseProxy') at module load.  Setting this here
+  //   lets you point it at your own worker without touching the app bundle.
+  //   To deploy: replace the base URL with your own worker, then hard-refresh.
+  //   If you don't set one, the app falls back to the author's (dead) worker.
+  var NETEASE_PROXY_BASE = '';  // ← paste your worker URL here, e.g. 'https://netease-proxy-yourname.workers.dev'
+  if (NETEASE_PROXY_BASE) {
+    window.__NUO_NETEASE_PROXY = NETEASE_PROXY_BASE;
+    if (!localStorage.getItem('nuoNeteaseProxy')) {
+      try { localStorage.setItem('nuoNeteaseProxy', NETEASE_PROXY_BASE); } catch (_) {}
+    }
+  }
+
   // ── 1. Stable local userId; seed localStorage (mirror, legacy-safe) ──────
   var uid;
   try {

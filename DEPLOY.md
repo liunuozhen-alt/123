@@ -5,6 +5,23 @@
 - 已做 4 处登录/门控绕过（见 `BYPASS_LOGIN_CHANGES.md`）：厂商域校验恒真、锁定屏关闭、sessionStorage 预置、根相对路径改写。
 - 注入 `__NUO_OFFLINE_LAYER__`（内联在 index.html head，module 脚本之前）：**外科手术式拦截**，只把厂商 OTA `assets.nuojiji.app/ota/version.json` 钉在 `{version:'6.9.89'}`（防自动更新/重载/迁移 nag），**其余所有端点全走真实网络**。
 
+## 为什么记忆宫殿 / 此时此刻「一直转圈」
+这些数据型 App 全部以一个 `userId` 作为本地数据锚点。它**不是**从 localStorage 读的，而是从 **IndexedDB（`NuojijiStructuredDB`）**：
+- `profileUsers` ← `users` 表
+- `currentProfileUserId` ← `globalSettings` 表
+
+绕过厂商登录 = 没有 userId 下发 → 两张表为空 → 每个 screen 的 `useEffect` 命中 `if (!userId) return;`，spinner 永不解除。
+
+本镜像的注入层已在 **IndexedDB 直写**：
+- `users` 表塞一行 `{ uid: 'mirror_local_xxx', name: 'Mirror' }`
+- `globalSettings` 表写入 `nuojiji_current_profile_user_id = 该行 uid`
+
+等待 App 先建好 DB（v820，全表齐全）后，用「无版本号 open」方式写入（不会触发 versionchange 冲突）。App 启动后：
+- 记忆宫殿拿到 userId → `getRoomStats()` 正常读 Dexie → **显示「空宫殿」骨架而非卡死**（你还没在这里录入过记忆，这是正确的）
+- 之后每录入一条，数据就累积在本地
+
+> 旧版（`doQvQ_doorkicker-main.zip`）是早期单 bundle 构建，记忆宫殿没有 `currentProfileUserId` 严格门控，所以不需要 seed；6.9.89 版本**新增**了 `getRoomStats(userId)` + 严格 gating，才需要这次的 IDB seed。
+
 ## 哪些保留、哪些被钉
 | 端点 | 行为 | 说明 |
 |------|------|------|
@@ -56,6 +73,29 @@ powershell -NoProfile -Command "Compress-Archive -LiteralPath ./* -DestinationPa
 - 白屏/404 子路由：确认 `_redirects` 在根目录且含 `/* /index.html 200`。
 - 旧 index.html 缓存导致"回到上一版"：`_headers` 已给 `/`、`/index.html` 设 `no-cache`；硬刷新 `Ctrl+F5` 或 URL 加 `?v=2`。
 - OTA 仍弹更新：确认拦截层在 module 脚本之前注入（`index.html` 搜索 `__NUO_OFFLINE_LAYER__` 应存在且位于 `<script type="module">` 上方）。
+
+## 网易云登录二维码获取失败（已修复）
+6.9.89 的 `neteaseService-BRiOs1ds.js` 把**所有**网易云调用（QR 登录 key/check/status、搜索、歌曲 URL、歌词、流媒体）统一发到作者公开的 Cloudflare Worker `wispy-frog-4582.wcl20071005.workers.dev` 作为 CORS 代理（`music.163.com` 不发 CORS 头，浏览器直连会被拦）。该 worker 已**不可达**（DNS 解析到非 CF IP、TCP 连接超时），旧版 `wcl20091007.workers.dev` 也已失效 → 这就是「获取登录二维码失败」的根因。
+
+已做两处改动：
+1. `runtime/assets/neteaseService-BRiOs1ds.js` — 把 3 处写死的死 worker 基址改为可覆盖：
+   - 模块加载时读 `window.__NUO_NETEASE_PROXY` 或 `localStorage.nuoNeteaseProxy`，都没有才回落到原死 worker（行为不变，纯兼容）。
+   - 控制台会打印一行 `[NuoMirror] NetEase proxy base = <实际地址>`，可在 DevTools 确认当前用的哪个。
+2. `offline-layer.js`（已注入 `index.html`）— 提供 `NETEASE_PROXY_BASE` 变量（默认空串 = 回落到原死 worker）。填上你自己的 worker URL 后：
+   - 启动时写入 `window.__NUO_NETEASE_PROXY` + `localStorage.nuoNeteaseProxy`
+   - 无需重新下载 App，改一个变量、重新注入、硬刷新即可。
+
+### 部署你自己的网易云代理 Worker
+1. `runtime/netease-proxy-worker.js` 是可直接部署的 Cloudflare Worker 源码，实现了 App 期望的路由契约（`/login/qr/key`、`/login/qr/check`、`/login/status`、`/search`、`/song/detail`、`/song/url`、`/lyric`、`/user/playlist`、`/playlist/detail`、`/personalized/newsong`、`/stream?url=`）并转发到 `music.163.com` 的 `/weapi`/`/eapi`。
+2. 在你的 Cloudflare 账号里部署：
+   ```bash
+   npx wrangler deploy netease-proxy-worker.js   # 生成 https://<name>-<you>.workers.dev
+   ```
+   或 Dashboard → Workers → Create → Upload 拖进去。
+3. 把 worker URL 填进 `offline-layer.js` 的 `NETEASE_PROXY_BASE`（或在浏览器控制台跑一次 `localStorage.setItem('nuoNeteaseProxy','https://<your-worker>')` 然后 `location.reload()`）。
+4. 打开 App → 网易云 → 点「登录」，此时「获取登录二维码」应能成功；扫码后 cookie 会写进本地 `neteaseMusicCookie`，后续搜索/播放/歌单都走你自己 worker。
+
+> **注意**：网易云 API 偶尔会加签或改路由，如果某个子路由 403/401，单独调整 `netease-proxy-worker.js` 里对应的 `ROUTES` 项；或者把 [NeteaseCloudMusicApi](https://github.com/neteasecloudmusicapi/NeteaseCloudMusicApi) 的 `server.js` 逻辑嵌进你的 Worker（路由映射保持不变，只换后端转发目标即可，App 端无需再改）。
 
 ## 安全提醒
 - 这是**单用户自用镜像**，勿公开发布：它绕过厂商登录/域校验，并保留对 `pb.nuojiji.app`、`*.supabase.co`、`*.workers.dev` 的直连（里面带你的 API key）。
