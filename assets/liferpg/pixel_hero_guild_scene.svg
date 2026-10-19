@@ -1,0 +1,251 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="100%" height="100%" shape-rendering="crispEdges">
+  <defs>
+    <!-- 酒馆公会石木大厅渐变 -->
+    <linearGradient id="guildWallGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2d1a12" />
+      <stop offset="40%" stop-color="#3e2723" />
+      <stop offset="100%" stop-color="#271406" />
+    </linearGradient>
+
+    <!-- 暖黄吊灯光晕 -->
+    <radialGradient id="lampGlow" cx="50%" cy="0%" r="80%">
+      <stop offset="0%" stop-color="#fff9c4" stop-opacity="0.35" />
+      <stop offset="50%" stop-color="#ffd54f" stop-opacity="0.15" />
+      <stop offset="100%" stop-color="#ffb300" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- 羊皮纸委托单卷轴渐变 -->
+    <linearGradient id="scrollParchment" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fffde7" />
+      <stop offset="50%" stop-color="#fff8e1" />
+      <stop offset="100%" stop-color="#ffe082" />
+    </linearGradient>
+
+    <filter id="exclaimGlow">
+      <feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="#ff1744" flood-opacity="0.9"/>
+    </filter>
+  </defs>
+
+  <!-- ==================== 1. 酒馆公会大厅背景 ==================== -->
+  <rect width="480" height="150" fill="url(#guildWallGrad)" />
+  <!-- 石砌拱门与原木立柱 -->
+  <rect x="0" y="0" width="40" height="150" fill="#4e342e" stroke="#271406" stroke-width="2" />
+  <rect x="440" y="0" width="40" height="150" fill="#4e342e" stroke="#271406" stroke-width="2" />
+  <line x1="0" y1="35" x2="480" y2="35" stroke="#1b0000" stroke-width="2" opacity="0.4" />
+  <line x1="0" y1="75" x2="480" y2="75" stroke="#1b0000" stroke-width="2" opacity="0.4" />
+  <line x1="0" y1="115" x2="480" y2="115" stroke="#1b0000" stroke-width="2" opacity="0.4" />
+
+  <!-- 欧式铁艺吊灯与暖黄光芒 -->
+  <g transform="translate(240, 0)">
+    <line x1="0" y1="0" x2="0" y2="24" stroke="#263238" stroke-width="3" />
+    <path d="M -35,24 L 35,24 L 25,32 L -25,32 Z" fill="#37474f" />
+    <rect x="-30" y="16" width="6" height="8" fill="#fff9c4" />
+    <circle cx="-27" cy="14" r="3" fill="#ffab00" />
+    <rect x="0" y="14" width="6" height="10" fill="#fff9c4" />
+    <circle cx="3" cy="12" r="3" fill="#ffab00" />
+    <rect x="24" y="16" width="6" height="8" fill="#fff9c4" />
+    <circle cx="27" cy="14" r="3" fill="#ffab00" />
+    <!-- 巨大向下照耀的光晕 -->
+    <polygon points="-80,32 80,32 180,200 -180,200" fill="url(#lampGlow)" />
+  </g>
+
+  <!-- ==================== 2. 巨大羊皮纸任务委托告示板 ==================== -->
+  <g transform="translate(50, 20)">
+    <!-- 告示板黑胡桃木外框 -->
+    <rect width="380" height="92" rx="4" fill="#5d4037" stroke="#271406" stroke-width="4" />
+    <rect x="8" y="6" width="364" height="80" rx="2" fill="#d7ccc8" />
+    <!-- 装饰金铆钉 -->
+    <circle cx="16" cy="14" r="3" fill="#ffd700" />
+    <circle cx="364" cy="14" r="3" fill="#ffd700" />
+    <circle cx="16" cy="78" r="3" fill="#ffd700" />
+    <circle cx="364" cy="78" r="3" fill="#ffd700" />
+
+    <!-- 委托单 1：日常微习惯锻炼单 -->
+    <g transform="translate(25, 14)">
+      <rect width="68" height="64" rx="2" fill="url(#scrollParchment)" stroke="#8d6e63" stroke-width="1.5" />
+      <circle cx="34" cy="8" r="3.5" fill="#e53935" stroke="#b71c1c" stroke-width="1" />
+      <!-- 文字纹理 -->
+      <line x1="8" y1="20" x2="60" y2="20" stroke="#5d4037" stroke-width="2" />
+      <line x1="8" y1="28" x2="52" y2="28" stroke="#8d6e63" stroke-width="1.5" />
+      <line x1="8" y1="36" x2="45" y2="36" stroke="#8d6e63" stroke-width="1.5" />
+      <rect x="8" y="46" width="52" height="14" rx="2" fill="#81c784" />
+      <text x="34" y="57" fill="#1b5e20" font-size="8" font-weight="900" text-anchor="middle">💪 每日锻炼</text>
+    </g>
+
+    <!-- 委托单 2：S级核心紧急讨伐令 (金边红印) -->
+    <g transform="translate(105, 10)">
+      <rect width="84" height="72" rx="3" fill="#fff9c4" stroke="#f57f17" stroke-width="2.5" />
+      <!-- 红色大火漆印章 -->
+      <circle cx="70" cy="14" r="7" fill="#c62828" stroke="#b71c1c" stroke-width="1.5" />
+      <text x="70" y="17" fill="#fff" font-size="8" font-weight="900" text-anchor="middle">S</text>
+      <!-- 悬赏标题 -->
+      <text x="38" y="22" fill="#b71c1c" font-size="10" font-weight="900" text-anchor="middle">⭐ 紧急讨伐</text>
+      <line x1="10" y1="30" x2="74" y2="30" stroke="#e65100" stroke-width="2" />
+      <line x1="10" y1="38" x2="68" y2="38" stroke="#8d6e63" stroke-width="1.5" />
+      <line x1="10" y1="46" x2="60" y2="46" stroke="#8d6e63" stroke-width="1.5" />
+      <!-- 丰厚经验赏金标签 -->
+      <rect x="10" y="54" width="64" height="14" rx="2" fill="#ff5722" />
+      <text x="42" y="65" fill="#ffffff" font-size="9" font-weight="900" text-anchor="middle">EXP +300G</text>
+    </g>
+
+    <!-- 委托单 3：专注学习进阶单 -->
+    <g transform="translate(202, 14)">
+      <rect width="70" height="64" rx="2" fill="url(#scrollParchment)" stroke="#8d6e63" stroke-width="1.5" />
+      <circle cx="35" cy="8" r="3.5" fill="#1565c0" stroke="#0d47a1" stroke-width="1" />
+      <line x1="8" y1="20" x2="62" y2="20" stroke="#5d4037" stroke-width="2" />
+      <line x1="8" y1="28" x2="54" y2="28" stroke="#8d6e63" stroke-width="1.5" />
+      <line x1="8" y1="36" x2="48" y2="36" stroke="#8d6e63" stroke-width="1.5" />
+      <rect x="8" y="46" width="54" height="14" rx="2" fill="#64b5f6" />
+      <text x="35" y="57" fill="#0d47a1" font-size="8" font-weight="900" text-anchor="middle">📚 专注学习</text>
+    </g>
+
+    <!-- 委托单 4：健康早睡心愿单 -->
+    <g transform="translate(284, 12)">
+      <rect width="68" height="68" rx="2" fill="url(#scrollParchment)" stroke="#ad1457" stroke-width="1.5" />
+      <circle cx="34" cy="8" r="3.5" fill="#e91e63" />
+      <text x="34" y="24" fill="#880e4f" font-size="9" font-weight="900" text-anchor="middle">❤️ 健康早睡</text>
+      <line x1="8" y1="32" x2="60" y2="32" stroke="#ad1457" stroke-width="1.5" />
+      <line x1="8" y1="40" x2="52" y2="40" stroke="#8d6e63" stroke-width="1.5" />
+      <rect x="8" y="50" width="52" height="14" rx="2" fill="#ffd54f" />
+      <text x="34" y="61" fill="#3e2723" font-size="8" font-weight="900" text-anchor="middle">🪙 赏金 +50</text>
+    </g>
+  </g>
+
+  <!-- ==================== 3. 欧式酒馆红木吧台与道具 ==================== -->
+  <rect y="148" width="480" height="122" fill="#3e2723" />
+  <rect y="148" width="480" height="20" fill="#5d4037" stroke="#271406" stroke-width="2.5" />
+  <rect y="168" width="480" height="6" fill="#3e2723" />
+
+  <!-- 吧台上的麦香啤酒木杯与金币堆 -->
+  <!-- 左侧啤酒杯 -->
+  <g transform="translate(35, 136)">
+    <rect width="18" height="22" rx="2" fill="#8d6e63" stroke="#3e2723" stroke-width="1.5" />
+    <path d="M 18,5 Q 26,11 18,17" stroke="#3e2723" stroke-width="2" fill="none" />
+    <!-- 泡沫 -->
+    <rect x="-2" y="-4" width="22" height="8" rx="4" fill="#ffffff" />
+    <text x="2" y="14" font-size="10">🍺</text>
+  </g>
+
+  <!-- 散落的纯金金币堆 -->
+  <g transform="translate(420, 142)">
+    <ellipse cx="0" cy="10" rx="10" ry="4" fill="#f57f17" />
+    <ellipse cx="0" cy="8" rx="10" ry="4" fill="#ffd700" />
+    <ellipse cx="6" cy="4" rx="10" ry="4" fill="#f57f17" />
+    <ellipse cx="6" cy="2" rx="10" ry="4" fill="#ffd700" />
+    <ellipse cx="-4" cy="2" rx="9" ry="3.5" fill="#ffd700" />
+    <text x="2" y="-3" fill="#ffd700" font-size="9" font-weight="900">✨</text>
+  </g>
+
+  <!-- ==================== 4. 三位栩栩如生的日系冒险伙伴 NPC ==================== -->
+
+  <!-- NPC 1: 天才魔导士少女 · 艾米 (蓝发卷发 + 魔法法杖) -->
+  <g transform="translate(105, 95)">
+    <!-- 悬浮跳动的接任务感叹号 -->
+    <text x="0" y="-14" fill="#e53935" font-size="22" font-weight="900" text-anchor="middle" filter="url(#exclaimGlow)">❗</text>
+    
+    <!-- 深蓝魔导巫师帽 -->
+    <polygon points="-22,14 22,14 0,-18" fill="#283593" stroke="#1a237e" stroke-width="2" />
+    <polygon points="-12,12 12,12 0,-12" fill="#3949ab" />
+    <circle cx="0" cy="-18" r="4" fill="#ffd700" />
+
+    <!-- 少女可爱的面容与金色大卷发 -->
+    <path d="M -16,14 Q -24,40 -12,55" stroke="#3949ab" stroke-width="6" fill="none" />
+    <path d="M 16,14 Q 24,40 12,55" stroke="#3949ab" stroke-width="6" fill="none" />
+    <rect x="-10" y="8" width="20" height="20" rx="3" fill="#ffdfba" />
+    <!-- 灵动紫蓝大眼与红晕 -->
+    <rect x="-6" y="14" width="4" height="5" fill="#303f9f" />
+    <rect x="2" y="14" width="4" height="5" fill="#303f9f" />
+    <rect x="-5" y="14" width="2" height="2" fill="#fff" />
+    <rect x="3" y="14" width="2" height="2" fill="#fff" />
+    <circle cx="-5" cy="22" r="2.5" fill="#ff8a80" opacity="0.6" />
+    <circle cx="5" cy="22" r="2.5" fill="#ff8a80" opacity="0.6" />
+
+    <!-- 皇家法师长袍 -->
+    <polygon points="-14,28 14,28 20,72 -20,72" fill="#1a237e" />
+    <polygon points="-6,28 6,28 8,72 -8,72" fill="#ffffff" />
+    <rect x="-8" y="28" width="16" height="5" fill="#ffd700" />
+
+    <!-- 发光苍蓝魔导法杖 -->
+    <rect x="22" y="-15" width="5" height="88" rx="2" fill="#8d6e63" stroke="#ffd700" stroke-width="1.5" />
+    <circle cx="24" cy="-20" r="10" fill="#00e5ff" stroke="#ffd700" stroke-width="2.5" filter="url(#exclaimGlow)" />
+    <circle cx="24" cy="-20" r="4" fill="#ffffff" />
+
+    <text x="0" y="88" fill="#ffd54f" font-size="11" font-weight="900" text-anchor="middle" font-family="monospace">
+      魔导士·艾米
+    </text>
+  </g>
+
+  <!-- NPC 2: 公会长 / 重装大剑士 · 雷恩 (红发 + 龙鳞重铠) -->
+  <g transform="translate(240, 85)">
+    <!-- 巨大跳动感叹号 -->
+    <text x="0" y="-16" fill="#e53935" font-size="26" font-weight="900" text-anchor="middle" filter="url(#exclaimGlow)">❗</text>
+
+    <!-- 威武刺猬红发 -->
+    <polygon points="-22,10 -28,-10 -12,2 -5,-16 6,0 18,-14 24,2 30,-8 22,18" fill="#b71c1c" />
+    <polygon points="-16,8 -20,-4 -8,2 -3,-10 5,0 14,-8 18,2 24,-4 16,14" fill="#d32f2f" />
+    
+    <!-- 坚毅面容与刀疤 -->
+    <rect x="-12" y="8" width="24" height="22" rx="3" fill="#ffdfba" />
+    <rect x="-7" y="14" width="4" height="4" fill="#212121" />
+    <rect x="3" y="14" width="4" height="4" fill="#212121" />
+    <line x1="-8" y1="12" x2="8" y2="24" stroke="#d32f2f" stroke-width="1.5" opacity="0.6" />
+
+    <!-- 龙鳞重铠甲 (重装公会长) -->
+    <rect x="-20" y="30" width="40" height="52" rx="4" fill="#546e7a" stroke="#263238" stroke-width="2.5" />
+    <rect x="-10" y="34" width="20" height="24" fill="#ffd700" />
+    <circle cx="0" cy="46" r="6" fill="#b71c1c" />
+    <!-- 巨大肩甲 -->
+    <rect x="-28" y="28" width="12" height="18" rx="3" fill="#78909c" stroke="#263238" stroke-width="2" />
+    <rect x="16" y="28" width="12" height="18" rx="3" fill="#78909c" stroke="#263238" stroke-width="2" />
+
+    <!-- 背后巨大的龙鳞斩首巨剑 -->
+    <line x1="-26" y1="-14" x2="26" y2="80" stroke="#b0bec5" stroke-width="8" stroke-linecap="round" />
+    <circle cx="-26" cy="-14" r="5" fill="#ffd700" />
+
+    <text x="0" y="96" fill="#ffd54f" font-size="11" font-weight="900" text-anchor="middle" font-family="monospace">
+      公会长·雷恩
+    </text>
+  </g>
+
+  <!-- NPC 3: 灵动猫耳游侠 · 莉莉丝 (绿斗篷 + 短弓) -->
+  <g transform="translate(375, 100)">
+    <!-- 跳动感叹号 -->
+    <text x="0" y="-14" fill="#e53935" font-size="22" font-weight="900" text-anchor="middle" filter="url(#exclaimGlow)">❗</text>
+
+    <!-- 可爱的毛茸茸棕色猫耳 -->
+    <polygon points="-16,0 -22,-14 -8,-6" fill="#5d4037" stroke="#3e2723" stroke-width="1.5" />
+    <polygon points="-14,-2 -18,-10 -10,-6" fill="#ffab91" />
+    <polygon points="16,0 22,-14 8,-6" fill="#5d4037" stroke="#3e2723" stroke-width="1.5" />
+    <polygon points="14,-2 18,-10 10,-6" fill="#ffab91" />
+
+    <!-- 灵动少女面容与碧绿眼眸 -->
+    <circle cx="0" cy="12" r="16" fill="#ffdfba" />
+    <rect x="-6" y="8" width="4" height="5" fill="#2e7d32" />
+    <rect x="2" y="8" width="4" height="5" fill="#2e7d32" />
+    <rect x="-5" y="8" width="2" height="2" fill="#fff" />
+    <rect x="3" y="8" width="2" height="2" fill="#fff" />
+    <circle cx="-6" cy="16" r="2.5" fill="#ff8a80" opacity="0.6" />
+    <circle cx="6" cy="16" r="2.5" fill="#ff8a80" opacity="0.6" />
+
+    <!-- 翡翠游侠斗篷 -->
+    <polygon points="-16,24 16,24 22,68 -22,68" fill="#2e7d32" />
+    <polygon points="-8,24 8,24 10,68 -10,68" fill="#81c784" />
+    <!-- 弓箭手轻皮带与猎弓 -->
+    <rect x="-10" y="34" width="20" height="5" fill="#6d4c41" />
+    <path d="M 20,-6 Q 28,30 18,65" stroke="#8d6e63" stroke-width="3.5" fill="none" />
+    <line x1="20" y1="-6" x2="18" y2="65" stroke="#cfd8dc" stroke-width="1" />
+
+    <text x="0" y="84" fill="#ffd54f" font-size="11" font-weight="900" text-anchor="middle" font-family="monospace">
+      游侠·莉莉丝
+    </text>
+  </g>
+
+  <!-- 顶部 JRPG 公会经典标题框 -->
+  <g transform="translate(20, 15)">
+    <rect width="240" height="28" rx="3" fill="#1b1528" stroke="#f1c40f" stroke-width="2" />
+    <rect x="2" y="2" width="236" height="24" rx="2" fill="#281f3d" />
+    <text x="120" y="19" fill="#ffd54f" font-size="12" font-weight="900" text-anchor="middle" font-family="monospace" letter-spacing="1">
+      📜 冒险者公会 · QUEST GUILD
+    </text>
+  </g>
+</svg>

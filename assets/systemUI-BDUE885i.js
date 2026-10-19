@@ -1,0 +1,1 @@
+/* obfuscated */import{r}from'./app-core-DDmh9wYw.js';import'./vendor-react-Dqj4ggoj.js';import'./vendor-dexie-KLdnSHz2.js';import'./vendor-lucide-BTP96YLz.js';let e=null;function o(){return e||(e=r('SystemUI')),e;}export{o as getSystemUI};

@@ -1,0 +1,78 @@
+# === Cloudflare Pages HTTP 快取策略 + 安全 Headers ===
+# 防止部署新版後用戶因快取到舊 index.html 而白屏
+# 安全 headers 全部由本檔案管理（已移除 functions/_middleware.js 以節省 Workers 配額）
+#
+# ⚠️ Cloudflare Pages `_headers` 行為陷阱：
+#   特例路徑規則**不會覆蓋** /* 全局規則裡的同名 header，而是「追加」。
+#   因此全局 /* 設了 `Content-Security-Policy: frame-ancestors 'self'` 之後，
+#   即使在 /preview-* 寫白名單，響應裡會同時帶兩條 CSP，瀏覽器取交集 → 白名單作廢。
+#   X-Frame-Options 也同理：`X-Frame-Options:` 空值清除語法不可靠，會殘留 SAMEORIGIN。
+#
+#   解法：**從 /* 移除 XFO 和 CSP**，只給「真正需要防嵌入的路徑」（主入口 / 和 /index.html）
+#   單獨加。其他二次路徑 (/some-route) 不對應實體檔案，CF Pages SPA fallback 會 serve
+#   index.html，套用 /index.html 規則。preview-* 在自己的特例不被全局污染。
+
+# === 全站基礎安全 Headers（不含 XFO/CSP，避免污染預覽路徑）===
+/*
+  X-Content-Type-Options: nosniff
+  X-XSS-Protection: 1; mode=block
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(self), microphone=(self), geolocation=()
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
+
+# === 主入口反 iframe 嵌入（防釣魚）===
+# 二次路徑（/chat、/settings 等）不對應實體檔案，CF Pages 會 fallback 到 index.html
+# 並套用 /index.html 的 headers，所以這兩條覆蓋了所有 SPA 路由
+/
+  Cache-Control: no-cache
+  X-Frame-Options: SAMEORIGIN
+  Content-Security-Policy: frame-ancestors 'self'
+/index.html
+  Cache-Control: no-cache
+  X-Frame-Options: SAMEORIGIN
+  Content-Security-Policy: frame-ancestors 'self'
+
+# Service Worker：絕對不能快取，否則更新機制會失效
+/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate
+/registerSW.js
+  Cache-Control: no-cache, no-store, must-revalidate
+
+# Hashed 靜態資源：檔名含 hash，內容永不變，可永久快取
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# === 預覽頁（/preview-*）===
+# 必須放行跨域 iframe 嵌入（論壇/land 嵌入分享美化代碼預覽）
+#
+# ⚠️ 關鍵陷阱（2026-05-26 第二次踩）：Cloudflare Pages 預設會把 `.html` 後綴
+# 308 重定向到無後綴路徑（drop-trailing-html）。請求 `/preview-chat.html` 會
+# 308 跳到 `/preview-chat`，所以無後綴路徑才是真正命中的，必須兩個都寫。
+#
+# 由於上方已把 XFO + CSP 從 /* 全局移除，預覽頁這裡只需設置白名單 CSP，
+# 不會再有「兩條 CSP 取交集」的污染。
+# ⚠️ TODO 上線後刪除 localhost 兩條
+/preview-chat
+  Cache-Control: public, max-age=600, must-revalidate
+  Content-Security-Policy: frame-ancestors 'self' https://community.nuojiji.app https://nuojijiland.pages.dev http://localhost:5180 http://localhost:5181
+/preview-chat.html
+  Cache-Control: public, max-age=600, must-revalidate
+  Content-Security-Policy: frame-ancestors 'self' https://community.nuojiji.app https://nuojijiland.pages.dev http://localhost:5180 http://localhost:5181
+/preview-tm
+  Cache-Control: public, max-age=600, must-revalidate
+  Content-Security-Policy: frame-ancestors 'self' https://community.nuojiji.app https://nuojijiland.pages.dev http://localhost:5180 http://localhost:5181
+/preview-tm.html
+  Cache-Control: public, max-age=600, must-revalidate
+  Content-Security-Policy: frame-ancestors 'self' https://community.nuojiji.app https://nuojijiland.pages.dev http://localhost:5180 http://localhost:5181
+/preview-xinsheng
+  Cache-Control: public, max-age=600, must-revalidate
+  Content-Security-Policy: frame-ancestors 'self' https://community.nuojiji.app https://nuojijiland.pages.dev http://localhost:5180 http://localhost:5181
+/preview-xinsheng.html
+  Cache-Control: public, max-age=600, must-revalidate
+  Content-Security-Policy: frame-ancestors 'self' https://community.nuojiji.app https://nuojijiland.pages.dev http://localhost:5180 http://localhost:5181
+/preview-notif
+  Cache-Control: public, max-age=600, must-revalidate
+  Content-Security-Policy: frame-ancestors 'self' https://community.nuojiji.app https://nuojijiland.pages.dev http://localhost:5180 http://localhost:5181
+/preview-notif.html
+  Cache-Control: public, max-age=600, must-revalidate
+  Content-Security-Policy: frame-ancestors 'self' https://community.nuojiji.app https://nuojijiland.pages.dev http://localhost:5180 http://localhost:5181

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="referrer" content="strict-origin-when-cross-origin" />
+<meta name="robots" content="noindex" />
+<title>Jili player</title>
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}iframe{border:0;width:100%;height:100%;display:block}</style>
+</head>
+<body>
+<script>
+/*
+ * 叽哩叽哩放映室的中轉播放頁（套殼 App 用）
+ * App 頁面來源是 capacitor://localhost / https://localhost，直接嵌 YouTube 不帶正常 Referer 會被拒（錯誤 152/153）。
+ * 讓 App 先嵌這一頁（官網網域），這一頁再嵌官方播放器，並把兩邊的 postMessage 原樣轉發（YouTube 進度同步用）。
+ * 只允許嵌 YouTube / B 站官方播放器，不是通用跳板。
+ */
+(function () {
+    var ALLOWED = /^https:\/\/(www\.youtube\.com|www\.youtube-nocookie\.com|player\.bilibili\.com)\//;
+    var src = new URLSearchParams(location.search).get('src') || '';
+    if (!ALLOWED.test(src)) return;
+    try {
+        var u = new URL(src);
+        if (/youtube/.test(u.hostname)) {
+            u.searchParams.set('origin', location.origin);
+            u.searchParams.set('widget_referrer', location.origin);
+            src = u.toString();
+        }
+    } catch (e) { return; }
+    var f = document.createElement('iframe');
+    f.src = src;
+    f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+    f.allowFullscreen = true;
+    f.referrerPolicy = 'strict-origin-when-cross-origin';
+    document.body.appendChild(f);
+    window.addEventListener('message', function (e) {
+        if (e.source === f.contentWindow) {
+            try { parent.postMessage({ jiliEmbed: 1, data: e.data }, '*'); } catch (_) { }
+        } else if (e.source === parent && e.data && e.data.jiliEmbedToPlayer) {
+            try { f.contentWindow.postMessage(e.data.payload, '*'); } catch (_) { }
+        }
+    });
+})();
+</script>
+</body>
+</html>

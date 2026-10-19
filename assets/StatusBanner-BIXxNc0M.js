@@ -1,0 +1,1 @@
+/* obfuscated */import{j as k}from'./vendor-react-Dqj4ggoj.js';const s=['https://community.nuojiji.app','https://nuojijiland.pages.dev','http://localhost:5180','http://localhost:5181'];function o({status:C,message:G}){return C?k['jsx']('div',{'className':'preview-status\x20'+('error'===C?'error':''),'children':G}):null;}export{s as A,o as S};

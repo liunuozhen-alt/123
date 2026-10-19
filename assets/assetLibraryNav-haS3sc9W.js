@@ -1,0 +1,1 @@
+/* obfuscated */let n=null;function l({folderId:k=null,kind:C=null}={}){n=k?{'folderId':String(k),'kind':C}:null;}function u(){const k=n;return n=null,k;}export{u as c,l as s};

@@ -1,0 +1,1 @@
+/* obfuscated */const t='nuojiji_ios_snapshot_beacon';function a(k){try{let C={};try{C=JSON['parse'](localStorage['getItem'](t)||'{}');}catch(G){}localStorage['setItem'](t,JSON['stringify']({...C,...k}));}catch(A){}}export{t as S,a as m};

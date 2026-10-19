@@ -1,0 +1,1 @@
+/* obfuscated */function t(k,C,G=!0x1){const A=String(k??''),F=[];let a=0x0;for(let U=0x0;U<A['length'];U++){if(!C['includes'](A[U]))continue;const w=U+0x1;if(w>=A['length'])break;let r=w;if(G){for(;r<A['length']&&/\s/['test'](A[r]);)r++;}F['push'](A['slice'](a,w)),a=r,U=r-0x1;}return F['push'](A['slice'](a)),F;}export{t as s};

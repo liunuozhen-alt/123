@@ -1,0 +1,1 @@
+/* obfuscated */import{y as k}from'./app-core-DDmh9wYw.js';import{u as C}from'./useHealthAutoSync-CXaXOilx.js';import'./vendor-react-Dqj4ggoj.js';import'./vendor-dexie-KLdnSHz2.js';import'./vendor-lucide-BTP96YLz.js';function e(){const {currentProfileUser:G}=k();return C((null==G?void 0x0:G['uid'])||(null==G?void 0x0:G['id'])||''),null;}export{e as default};

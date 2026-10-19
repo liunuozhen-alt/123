@@ -1,0 +1,1 @@
+/* obfuscated */let n=null;function t(k){n=null==k?null:{'userId':String(k),'at':Date['now']()};}function l(k){const C=n;return n=null,!!C&&C['userId']===String(k)&&Date['now']()-C['at']<0xea60;}export{l as c,t as r};

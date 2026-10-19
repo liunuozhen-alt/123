@@ -1,0 +1,1 @@
+/* obfuscated */import{a as k}from'./vendor-react-Dqj4ggoj.js';const o=k(function(){throw new Error('ws\x20does\x20not\x20work\x20in\x20the\x20browser.\x20Browser\x20clients\x20must\x20use\x20the\x20native\x20WebSocket\x20object');}),t=Object['freeze'](Object['defineProperty']({'__proto__':null,'default':o},Symbol['toStringTag'],{'value':'Module'}));export{t as b};

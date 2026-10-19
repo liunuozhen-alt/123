@@ -1,0 +1,1 @@
+/* obfuscated */import{o8 as k}from'./app-core-DDmh9wYw.js';import'./vendor-react-Dqj4ggoj.js';import'./vendor-dexie-KLdnSHz2.js';import'./vendor-lucide-BTP96YLz.js';class r extends k{async['canOpenUrl'](C){return{'value':!0x0};}async['openUrl'](C){return window['open'](C['url'],'_blank'),{'completed':!0x0};}}export{r as AppLauncherWeb};

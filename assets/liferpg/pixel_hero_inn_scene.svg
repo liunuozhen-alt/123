@@ -1,0 +1,240 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="100%" height="100%" shape-rendering="crispEdges">
+  <defs>
+    <!-- 木屋墙壁暖棕色渐变 -->
+    <linearGradient id="innWallWood" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#4e342e" />
+      <stop offset="50%" stop-color="#3e2723" />
+      <stop offset="100%" stop-color="#2c1a14" />
+    </linearGradient>
+
+    <!-- 木质地板渐变 -->
+    <linearGradient id="innFloorWood" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3e2723" />
+      <stop offset="50%" stop-color="#2d1a12" />
+      <stop offset="100%" stop-color="#1b0e08" />
+    </linearGradient>
+
+    <!-- 晨曦金色丁达尔光柱 -->
+    <linearGradient id="sunBeamGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fff9c4" stop-opacity="0.35" />
+      <stop offset="60%" stop-color="#fff59d" stop-opacity="0.15" />
+      <stop offset="100%" stop-color="#ffe082" stop-opacity="0" />
+    </linearGradient>
+
+    <!-- 炉火光辉滤镜 -->
+    <filter id="fireGlow">
+      <feDropShadow dx="0" dy="0" stdDeviation="6" flood-color="#ff7043" flood-opacity="0.8"/>
+    </filter>
+  </defs>
+
+  <!-- ==================== 1. 木屋背景与墙面 ==================== -->
+  <rect width="480" height="155" fill="url(#innWallWood)" />
+  <!-- 横向原木拼接木纹缝隙 -->
+  <g stroke="#1a0d08" stroke-width="2" opacity="0.5">
+    <line x1="0" y1="26" x2="480" y2="26" />
+    <line x1="0" y1="52" x2="480" y2="52" />
+    <line x1="0" y1="78" x2="480" y2="78" />
+    <line x1="0" y1="104" x2="480" y2="104" />
+    <line x1="0" y1="130" x2="480" y2="130" />
+    <line x1="0" y1="155" x2="480" y2="155" />
+  </g>
+
+  <!-- 木地板与拼接砖缝 -->
+  <rect y="155" width="480" height="115" fill="url(#innFloorWood)" />
+  <g stroke="#140804" stroke-width="2" opacity="0.6">
+    <line x1="0" y1="182" x2="480" y2="182" />
+    <line x1="0" y1="210" x2="480" y2="210" />
+    <line x1="0" y1="240" x2="480" y2="240" />
+    <!-- 纵向木板缝 -->
+    <line x1="60" y1="155" x2="60" y2="182" />
+    <line x1="180" y1="155" x2="180" y2="182" />
+    <line x1="300" y1="155" x2="300" y2="182" />
+    <line x1="420" y1="155" x2="420" y2="182" />
+    <line x1="120" y1="182" x2="120" y2="210" />
+    <line x1="240" y1="182" x2="240" y2="210" />
+    <line x1="360" y1="182" x2="360" y2="210" />
+    <line x1="70" y1="210" x2="70" y2="240" />
+    <line x1="200" y1="210" x2="200" y2="240" />
+    <line x1="330" y1="210" x2="330" y2="240" />
+    <line x1="450" y1="210" x2="450" y2="240" />
+  </g>
+
+  <!-- 铺在床边的复古波斯几何编织地毯 -->
+  <g transform="translate(130, 205)">
+    <rect width="180" height="50" rx="3" fill="#880e4f" stroke="#ad1457" stroke-width="2" />
+    <rect x="4" y="4" width="172" height="42" fill="#c2185b" />
+    <rect x="8" y="8" width="164" height="34" fill="#f8bbd0" stroke="#880e4f" stroke-width="1.5" />
+    <!-- 几何菱形花纹 -->
+    <polygon points="40,25 55,14 70,25 55,36" fill="#ffd54f" />
+    <polygon points="90,25 105,14 120,25 105,36" fill="#ffd54f" />
+    <polygon points="140,25 155,14 170,25 155,36" fill="#ffd54f" />
+    <circle cx="55" cy="25" r="4" fill="#ad1457" />
+    <circle cx="105" cy="25" r="4" fill="#ad1457" />
+    <circle cx="155" cy="25" r="4" fill="#ad1457" />
+  </g>
+
+  <!-- ==================== 2. 窗户与晨曦光柱 ==================== -->
+  <g transform="translate(45, 25)">
+    <!-- 窗框与窗格 -->
+    <rect width="68" height="82" rx="4" fill="#ffe082" stroke="#271406" stroke-width="4" />
+    <rect x="4" y="4" width="60" height="74" fill="#fff9c4" />
+    <line x1="34" y1="0" x2="34" y2="82" stroke="#3e2723" stroke-width="4" />
+    <line x1="0" y1="41" x2="68" y2="41" stroke="#3e2723" stroke-width="4" />
+    <!-- 窗外蓝天与远山 -->
+    <rect x="6" y="6" width="26" height="33" fill="#81d4fa" />
+    <rect x="36" y="6" width="26" height="33" fill="#81d4fa" />
+    <polygon points="6,39 20,22 32,39" fill="#aed581" />
+    <polygon points="36,39 48,25 62,39" fill="#81c784" />
+    <!-- 窗帘帷幔 -->
+    <path d="M 0,0 Q 20,25 0,55" stroke="#d32f2f" stroke-width="5" fill="none" />
+    <path d="M 68,0 Q 48,25 68,55" stroke="#d32f2f" stroke-width="5" fill="none" />
+    
+    <!-- 斜射透入的晨曦光柱 -->
+    <polygon points="0,82 68,82 220,230 60,230" fill="url(#sunBeamGrad)" />
+    <!-- 窗外飘落的秋日红枫 -->
+    <text x="14" y="30" font-size="14">🍁</text>
+    <text x="42" y="65" font-size="12">🍂</text>
+    <text x="20" y="75" font-size="10">🍁</text>
+  </g>
+
+  <!-- ==================== 3. 鹅卵石石砌大壁炉 (右侧) ==================== -->
+  <g transform="translate(365, 38)" filter="url(#fireGlow)">
+    <!-- 壁炉石砌外框 -->
+    <rect width="84" height="115" rx="5" fill="#6d4c41" stroke="#271406" stroke-width="3.5" />
+    <!-- 鹅卵石纹理 -->
+    <rect x="6" y="8" width="18" height="10" rx="2" fill="#8d6e63" />
+    <rect x="28" y="8" width="24" height="10" rx="2" fill="#5d4037" />
+    <rect x="56" y="8" width="20" height="10" rx="2" fill="#8d6e63" />
+    <rect x="8" y="22" width="22" height="12" rx="2" fill="#5d4037" />
+    <rect x="54" y="22" width="22" height="12" rx="2" fill="#5d4037" />
+
+    <!-- 炉膛黑洞 -->
+    <rect x="16" y="44" width="52" height="71" rx="25" fill="#140700" stroke="#3e2723" stroke-width="2" />
+    <!-- 堆叠的燃烧木柴 -->
+    <rect x="22" y="98" width="40" height="10" rx="2" fill="#3e2723" />
+    <line x1="25" y1="100" x2="58" y2="106" stroke="#271406" stroke-width="2" />
+    
+    <!-- 熊熊燃烧的跳跃烈焰 -->
+    <polygon points="25,98 42,48 58,98" fill="#d50000" />
+    <polygon points="28,98 42,58 55,98" fill="#ff6d00" />
+    <polygon points="33,98 42,72 50,98" fill="#ffea00" />
+    <!-- 飞舞的小火星粒子 -->
+    <circle cx="36" cy="42" r="1.5" fill="#ffea00" />
+    <circle cx="48" cy="35" r="2" fill="#ff9100" />
+    <circle cx="40" cy="28" r="1.5" fill="#ffea00" />
+
+    <!-- 壁炉置物台 -->
+    <rect x="-4" y="-4" width="92" height="10" rx="2" fill="#4e342e" stroke="#271406" stroke-width="2" />
+    <!-- 台上的怀表与冒热气的小茶壶 -->
+    <circle cx="16" cy="-12" r="6" fill="#ffd700" stroke="#b78103" stroke-width="1.5" />
+    <line x1="16" y1="-15" x2="16" y2="-12" stroke="#3e2723" stroke-width="1.5" />
+    <line x1="16" y1="-12" x2="19" y2="-12" stroke="#3e2723" stroke-width="1.5" />
+    <!-- 茶壶 -->
+    <rect x="52" y="-18" width="16" height="14" rx="3" fill="#cfd8dc" stroke="#455a64" stroke-width="1.5" />
+    <path d="M 68,-12 Q 74,-15 72,-8" stroke="#455a64" stroke-width="2" fill="none" />
+    <text x="56" y="-22" font-size="8">♨️</text>
+  </g>
+
+  <!-- ==================== 4. 墙面装饰：挂剑、盾牌与魔法药水架 ==================== -->
+  <g transform="translate(170, 35)">
+    <!-- 魔法药水木架 -->
+    <rect x="-35" y="0" width="46" height="6" fill="#5d4037" rx="1" />
+    <!-- 红色生命药水 -->
+    <rect x="-32" y="-12" width="8" height="12" rx="2" fill="#e53935" stroke="#b71c1c" stroke-width="1" />
+    <circle cx="-28" cy="-14" r="2" fill="#ffcdd2" />
+    <!-- 蓝色魔力药水 -->
+    <rect x="-20" y="-14" width="10" height="14" rx="2" fill="#00e5ff" stroke="#0091ea" stroke-width="1" />
+    <circle cx="-15" cy="-16" r="2" fill="#e0f7fa" />
+    <!-- 绿色体力药水 -->
+    <rect x="-6" y="-10" width="8" height="10" rx="2" fill="#00e676" stroke="#00c853" stroke-width="1" />
+
+    <!-- 挂在墙上的银色皇家狮鹫盾牌 -->
+    <polygon points="25,-8 55,-8 60,25 40,46 20,25" fill="#b0bec5" stroke="#ffd700" stroke-width="2.5" />
+    <polygon points="30,0 50,0 54,20 40,36 26,20" fill="#1565c0" />
+    <circle cx="40" cy="14" r="6" fill="#ffd700" />
+    <!-- 交叉在盾牌后的圣剑鞘 -->
+    <line x1="12" y1="42" x2="68" y2="-16" stroke="#ffd700" stroke-width="4" />
+    <line x1="12" y1="-16" x2="68" y2="42" stroke="#cfd8dc" stroke-width="3" />
+  </g>
+
+  <!-- ==================== 5. 传说的红木大床与安睡勇者 ==================== -->
+  <g transform="translate(150, 130)">
+    <!-- 床头立柱与雕花木板 -->
+    <rect x="-14" y="-38" width="22" height="88" rx="4" fill="#4e342e" stroke="#271406" stroke-width="3" />
+    <circle cx="-3" cy="-44" r="7" fill="#ffd700" stroke="#b78103" stroke-width="2" />
+
+    <!-- 床架主体 -->
+    <rect x="0" y="0" width="165" height="58" rx="4" fill="#5d4037" stroke="#271406" stroke-width="3.5" />
+    <!-- 蓬松舒适的淡蓝床垫 -->
+    <rect x="4" y="4" width="155" height="48" rx="2" fill="#bbdefb" />
+    
+    <!-- 蓬松大白羽绒枕 -->
+    <rect x="8" y="10" width="34" height="30" rx="5" fill="#ffffff" stroke="#90caf9" stroke-width="2" />
+    <line x1="12" y1="25" x2="38" y2="25" stroke="#e3f2fd" stroke-width="2" />
+
+    <!-- 熟睡的日系少年勇者 -->
+    <g transform="translate(18, 14)">
+      <!-- 头部皮肤 -->
+      <rect x="0" y="0" width="24" height="22" rx="3" fill="#ffdfba" />
+      <!-- 金色碎发散落枕间 -->
+      <path d="M -3,0 L 26,0 L 26,8 L 18,10 L 10,6 L 0,8 Z" fill="#f57f17" />
+      <path d="M 0,2 L 24,2 L 24,7 L 16,8 L 8,5 L 0,6 Z" fill="#fbc02d" />
+      <!-- 安详的睡眼睫毛与可爱的红晕 -->
+      <line x1="4" y1="12" x2="9" y2="12" stroke="#3e2723" stroke-width="2" stroke-linecap="round" />
+      <line x1="15" y1="12" x2="20" y2="12" stroke="#3e2723" stroke-width="2" stroke-linecap="round" />
+      <circle cx="4" cy="16" r="3" fill="#ff8a80" opacity="0.6" />
+      <circle cx="20" cy="16" r="3" fill="#ff8a80" opacity="0.6" />
+      
+      <!-- 缓缓飘向窗外的半透明蓝色 Zzz 呼吸气泡 -->
+      <g fill="#00b0ff" font-weight="900" font-family="monospace">
+        <text x="18" y="-8" font-size="12">Z</text>
+        <text x="26" y="-16" font-size="15">z</text>
+        <text x="36" y="-26" font-size="18">z...</text>
+      </g>
+    </g>
+
+    <!-- 金色镶边皇家深蓝厚绒棉被 -->
+    <rect x="44" y="6" width="115" height="46" rx="3" fill="#1565c0" stroke="#0d47a1" stroke-width="2.5" />
+    <rect x="44" y="6" width="16" height="46" fill="#42a5f5" />
+    <!-- 棉被金线花纹 -->
+    <line x1="60" y1="6" x2="60" y2="52" stroke="#ffd700" stroke-width="2" />
+    <circle cx="100" cy="28" r="10" fill="#0d47a1" stroke="#ffd700" stroke-width="1.5" />
+    <text x="100" y="32" fill="#ffd700" font-size="12" font-weight="900" text-anchor="middle">👑</text>
+
+    <!-- 床尾立柱 -->
+    <rect x="156" y="-12" width="16" height="66" rx="3" fill="#4e342e" stroke="#271406" stroke-width="3" />
+    <circle cx="164" cy="-18" r="6" fill="#ffd700" stroke="#b78103" stroke-width="2" />
+  </g>
+
+  <!-- 床头小木柜：一杯冒着白烟的热牛奶 -->
+  <g transform="translate(105, 175)">
+    <rect width="28" height="35" rx="3" fill="#5d4037" stroke="#271406" stroke-width="2" />
+    <rect x="4" y="10" width="20" height="2" fill="#3e2723" />
+    <!-- 牛奶木杯 -->
+    <rect x="6" y="-10" width="14" height="12" rx="2" fill="#fff" stroke="#cfd8dc" stroke-width="1.5" />
+    <rect x="8" y="-9" width="10" height="4" fill="#fffde7" />
+    <text x="9" y="-14" font-size="10">♨️</text>
+  </g>
+
+  <!-- 摆在床边的皮质探险长靴 -->
+  <g transform="translate(140, 235)">
+    <rect x="0" y="0" width="14" height="18" rx="2" fill="#6d4c41" stroke="#271406" stroke-width="1.5" />
+    <rect x="0" y="12" width="20" height="6" rx="2" fill="#4e342e" stroke="#271406" stroke-width="1.5" />
+    <rect x="18" y="0" width="14" height="18" rx="2" fill="#6d4c41" stroke="#271406" stroke-width="1.5" />
+    <rect x="18" y="12" width="20" height="6" rx="2" fill="#4e342e" stroke="#271406" stroke-width="1.5" />
+  </g>
+
+  <!-- 散落的秋日红枫叶 -->
+  <text x="315" y="240" font-size="16">🍁</text>
+  <text x="110" y="250" font-size="14">🍂</text>
+  <text x="350" y="255" font-size="14">🍁</text>
+
+  <!-- 顶部 JRPG 经典旅店标题框 -->
+  <g transform="translate(20, 15)">
+    <rect width="240" height="28" rx="3" fill="#1b1528" stroke="#f1c40f" stroke-width="2" />
+    <rect x="2" y="2" width="236" height="24" rx="2" fill="#281f3d" />
+    <text x="120" y="19" fill="#ffd54f" font-size="12" font-weight="900" text-anchor="middle" font-family="monospace" letter-spacing="1">
+      🛌 勇者旅店 · INN &amp; RESTORE
+    </text>
+  </g>
+</svg>

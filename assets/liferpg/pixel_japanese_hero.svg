@@ -1,0 +1,184 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="100%" height="100%" shape-rendering="crispEdges">
+  <defs>
+    <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a1130" />
+      <stop offset="35%" stop-color="#3b1b4f" />
+      <stop offset="70%" stop-color="#7a2b58" />
+      <stop offset="100%" stop-color="#c85a53" />
+    </linearGradient>
+    <linearGradient id="glowSword" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#e0ffff" />
+      <stop offset="50%" stop-color="#00ffff" />
+      <stop offset="100%" stop-color="#00bfff" />
+    </linearGradient>
+    <filter id="pixelGlow">
+      <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#00ffff" flood-opacity="0.8"/>
+    </filter>
+  </defs>
+
+  <!-- 天空与晚霞背景 -->
+  <rect width="480" height="270" fill="url(#skyGrad)" />
+
+  <!-- 像素星星与魔力光点 -->
+  <g fill="#ffeaa7" opacity="0.8">
+    <rect x="30" y="20" width="4" height="4" />
+    <rect x="32" y="18" width="2" height="8" />
+    <rect x="28" y="20" width="8" height="2" />
+    
+    <rect x="90" y="45" width="2" height="2" />
+    <rect x="140" y="15" width="3" height="3" />
+    <rect x="220" y="35" width="4" height="4" />
+    <rect x="310" y="25" width="2" height="2" />
+    <rect x="380" y="50" width="4" height="4" />
+    <rect x="440" y="20" width="3" height="3" />
+    <rect x="420" y="65" width="2" height="2" />
+  </g>
+
+  <!-- 巨大像素满月 -->
+  <circle cx="390" cy="70" r="32" fill="#fffbe8" opacity="0.9" />
+  <circle cx="380" cy="65" r="28" fill="#fffbe8" opacity="0.9" />
+  <g fill="#f1e7b6" opacity="0.6">
+    <rect x="375" y="55" width="10" height="8" />
+    <rect x="395" y="68" width="14" height="6" />
+    <rect x="385" y="80" width="8" height="8" />
+  </g>
+
+  <!-- 远景像素雪山与城堡剪影 -->
+  <path d="M 0,160 L 60,110 L 110,145 L 170,95 L 240,150 L 300,105 L 360,140 L 420,100 L 480,135 L 480,270 L 0,270 Z" fill="#2d133b" />
+  <!-- 远古城堡群 -->
+  <path d="M 150,110 L 150,85 L 158,85 L 158,110 L 165,110 L 165,75 L 175,65 L 185,75 L 185,110 L 192,110 L 192,90 L 200,90 L 200,110 Z" fill="#230e2e" />
+
+  <!-- 中景森林树冠层 -->
+  <g fill="#1a2536">
+    <path d="M 0,185 Q 40,165 80,185 Q 120,160 160,185 Q 200,165 240,190 Q 280,160 320,185 Q 360,165 400,185 Q 440,160 480,180 L 480,270 L 0,270 Z" />
+  </g>
+  <g fill="#121b28">
+    <path d="M 0,205 Q 50,185 100,205 Q 150,180 200,205 Q 250,185 300,210 Q 350,180 400,205 Q 450,185 480,200 L 480,270 L 0,270 Z" />
+  </g>
+
+  <!-- 近景古代遗迹神殿台阶 (高台) -->
+  <g fill="#3a2f4c">
+    <polygon points="160,270 200,200 360,200 400,270" />
+    <rect x="180" y="200" width="200" height="8" fill="#52436b" />
+    <rect x="170" y="208" width="220" height="8" fill="#443759" />
+    <rect x="160" y="216" width="240" height="10" fill="#362b47" />
+    <!-- 像素石砖缝隙 -->
+    <rect x="220" y="202" width="2" height="6" fill="#2a1f38" />
+    <rect x="280" y="202" width="2" height="6" fill="#2a1f38" />
+    <rect x="340" y="202" width="2" height="6" fill="#2a1f38" />
+    <rect x="200" y="210" width="2" height="6" fill="#2a1f38" />
+    <rect x="260" y="210" width="2" height="6" fill="#2a1f38" />
+    <rect x="320" y="210" width="2" height="6" fill="#2a1f38" />
+  </g>
+
+  <!-- 神殿两侧符文石柱 -->
+  <g fill="#2d223c">
+    <!-- 左石柱 -->
+    <rect x="120" y="140" width="24" height="90" rx="2" />
+    <rect x="116" y="136" width="32" height="8" fill="#47365f" />
+    <rect x="116" y="222" width="32" height="8" fill="#47365f" />
+    <!-- 符文发光 -->
+    <rect x="130" y="155" width="4" height="12" fill="#00e5ff" opacity="0.8" />
+    <rect x="126" y="175" width="12" height="4" fill="#00e5ff" opacity="0.8" />
+    <rect x="130" y="190" width="4" height="10" fill="#00e5ff" opacity="0.8" />
+
+    <!-- 右石柱 -->
+    <rect x="410" y="140" width="24" height="90" rx="2" />
+    <rect x="406" y="136" width="32" height="8" fill="#47365f" />
+    <rect x="406" y="222" width="32" height="8" fill="#47365f" />
+    <!-- 符文发光 -->
+    <rect x="420" y="155" width="4" height="12" fill="#00e5ff" opacity="0.8" />
+    <rect x="416" y="175" width="12" height="4" fill="#00e5ff" opacity="0.8" />
+    <rect x="420" y="190" width="4" height="10" fill="#00e5ff" opacity="0.8" />
+  </g>
+
+  <!-- ==================== 经典 16-bit 日系少年勇者 (Hero) ==================== -->
+  <g transform="translate(240, 100)">
+    <!-- 红色飘逸斗篷 (Cape) -->
+    <path d="M -12,45 L -36,85 L -10,80 L 15,82 L 24,50 Z" fill="#b71c1c" />
+    <path d="M -16,50 L -42,92 L -18,85 Z" fill="#d32f2f" />
+    <path d="M -22,55 L -46,95 L -26,88 Z" fill="#e53935" />
+
+    <!-- 勇者腿部与皮靴 (Boots) -->
+    <!-- 左腿 -->
+    <rect x="-10" y="70" width="8" height="22" fill="#2c3e50" />
+    <rect x="-12" y="86" width="10" height="12" fill="#6d4c41" />
+    <rect x="-14" y="94" width="12" height="4" fill="#4e342e" />
+    <!-- 右腿 (向前踏步) -->
+    <rect x="4" y="70" width="8" height="22" fill="#34495e" />
+    <rect x="4" y="86" width="12" height="12" fill="#8d6e63" />
+    <rect x="4" y="94" width="14" height="4" fill="#5d4037" />
+
+    <!-- 勇者身躯与铠甲 (Chest Armor) -->
+    <rect x="-10" y="42" width="22" height="30" fill="#1565c0" rx="2" />
+    <!-- 金色胸甲镶边 -->
+    <rect x="-8" y="44" width="18" height="18" fill="#fbc02d" />
+    <rect x="-5" y="47" width="12" height="12" fill="#fff59d" />
+    <rect x="-3" y="49" width="8" height="8" fill="#f57f17" />
+    <!-- 冒险腰带与金扣 -->
+    <rect x="-11" y="66" width="24" height="6" fill="#3e2723" />
+    <rect x="-3" y="65" width="8" height="8" fill="#ffd700" />
+
+    <!-- 勇者头部与面部 (Head & Face) -->
+    <!-- 皮肤 -->
+    <rect x="-6" y="24" width="16" height="18" fill="#ffdfba" rx="2" />
+    <!-- 坚毅的日系大眼与微笑 -->
+    <rect x="-2" y="30" width="3" height="5" fill="#1a237e" />
+    <rect x="5" y="30" width="3" height="5" fill="#1a237e" />
+    <rect x="-1" y="31" width="1" height="2" fill="#ffffff" />
+    <rect x="6" y="31" width="1" height="2" fill="#ffffff" />
+    <rect x="0" y="38" width="4" height="2" fill="#d87d6b" />
+
+    <!-- 标志性日系刺猬金发 (Anime Spike Hair) -->
+    <!-- 头发主体 -->
+    <path d="M -14,24 L -18,14 L -8,18 L -4,4 L 4,14 L 14,2 L 16,16 L 24,12 L 16,28 L -6,28 Z" fill="#f39c12" />
+    <path d="M -10,22 L -14,15 L -6,18 L -2,8 L 4,16 L 12,6 L 14,18 L 20,15 L 14,26 L -4,26 Z" fill="#f1c40f" />
+    <path d="M -6,18 L -10,14 L -4,15 L 0,10 L 4,14 L 10,8 L 10,16 Z" fill="#fff176" />
+    <!-- 勇者红色额带 (Headband) -->
+    <rect x="-8" y="22" width="20" height="4" fill="#e74c3c" />
+
+    <!-- 左手臂与护腕 (Holding Sword) -->
+    <rect x="8" y="44" width="8" height="16" fill="#ffdfba" />
+    <rect x="10" y="52" width="8" height="6" fill="#f39c12" />
+
+    <!-- ==================== 传奇勇者发光圣剑 (Excalibur) ==================== -->
+    <g transform="translate(14, 52) rotate(-35)" filter="url(#pixelGlow)">
+      <!-- 剑柄与剑锷 -->
+      <rect x="-3" y="10" width="6" height="14" fill="#6d4c41" />
+      <circle cx="0" cy="24" r="4" fill="#ffd700" />
+      <!-- 金色飞翼剑格 -->
+      <path d="M -16,8 L 16,8 L 12,2 L -12,2 Z" fill="#ffd700" />
+      <circle cx="0" cy="5" r="3" fill="#00e5ff" />
+      
+      <!-- 发光神圣剑刃 -->
+      <polygon points="-5,2 5,2 4,-65 0,-76 -4,-65" fill="url(#glowSword)" />
+      <!-- 剑刃中线流光 -->
+      <line x1="0" y1="2" x2="0" y2="-70" stroke="#ffffff" stroke-width="2" />
+    </g>
+
+    <!-- 剑刃周围魔力光芒粒子 -->
+    <g fill="#00ffff" opacity="0.9">
+      <rect x="35" y="0" width="4" height="4" />
+      <rect x="55" y="-10" width="3" height="3" />
+      <rect x="65" y="15" width="4" height="4" />
+      <rect x="25" y="-20" width="3" height="3" />
+      <rect x="45" y="30" width="2" height="2" />
+    </g>
+  </g>
+
+  <!-- 底部 JRPG 复古文字铭牌框 -->
+  <g transform="translate(30, 215)">
+    <rect width="420" height="44" rx="4" fill="#1b1528" stroke="#f1c40f" stroke-width="2" />
+    <rect x="3" y="3" width="414" height="38" rx="2" fill="#281f3d" />
+    <!-- 装饰金角 -->
+    <rect x="0" y="0" width="6" height="6" fill="#ffd700" />
+    <rect x="414" y="0" width="6" height="6" fill="#ffd700" />
+    <rect x="0" y="38" width="6" height="6" fill="#ffd700" />
+    <rect x="414" y="38" width="6" height="6" fill="#ffd700" />
+    
+    <!-- 经典 RPG 文字 -->
+    <text x="20" y="26" fill="#ffffff" font-size="14" font-weight="900" font-family="monospace, sans-serif" letter-spacing="1">
+      ⚔️ 勇者啊，每一次现实打卡，都是向人生顶峰的拔剑进发！
+    </text>
+  </g>
+</svg>

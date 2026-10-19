@@ -1,0 +1,1 @@
+/* obfuscated */import{b as k}from'./app-core-DDmh9wYw.js';const r=C=>((()=>{try{if(k())return!0x0;const G=navigator['userAgent']||'';return/iPad|iPhone|iPod/['test'](G)||/Macintosh/['test'](G)&&(navigator['maxTouchPoints']||0x0)>0x1;}catch{return!0x1;}})())?'*/*':C;export{r as f};

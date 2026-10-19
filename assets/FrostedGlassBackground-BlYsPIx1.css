@@ -1,0 +1,1 @@
+:root{--glass-overlay-color: rgba(255, 255, 255, .45)}#nuo-os-root.dark-mode{--glass-overlay-color: rgba(30, 30, 30, .65)}@keyframes glass-fade-in{0%{opacity:0}to{opacity:1}}

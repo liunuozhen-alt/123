@@ -1,0 +1,2283 @@
+<!DOCTYPE html>
+<html lang="zh-TW" translate="no">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" id="nuo-viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
+  <!-- 🔧 界面缩放【首帧生效】：缩放改用 meta viewport 的 width 反算（120% → 布局视口宽 = 设备宽/1.2，
+       浏览器自己把整页放大铺满屏幕），不再用 #nuo-os-root 的 zoom。
+       原因：zoom 对视口单位（100vw / 100vh / 100dvh）的处理各引擎不一致 —— 新 Chromium 会把视口单位
+       除以 zoom（正常），旧 Chromium / 国产 ROM WebView / WebKit 私有 zoom 不除（100vh 仍是原始视口像素，
+       再被 zoom 乘一次）→ 全项目 600+ 处硬写的视口单位在这些机器上整体错位（放大时右侧/底部溢出被裁、
+       缩小时四周露白），正是「只有 100% 正常、部分手机界面错乱」的真因。
+       改用 meta viewport 后，CSS px 坐标系本身就变了：所有 100vw/100vh/100dvh、env()、JS 的
+       innerWidth/innerHeight 全部落在同一套已缩放的 CSS px 里，天然自洽，任何引擎行为一致、零补丁。
+       ⚠️ 此脚本必须【内联在 head、位于任何样式/脚本之前】，让首帧布局就用对的视口宽度，
+          否则冷启动会先按 100% 排一帧再跳变。 -->
+  <!-- 🔬 開機錯誤黑盒（必須是全頁第一個 script）：
+       事故：用戶回報「永久蝴蝶」，診斷只寫「主腳本: 無」——entry module 根本沒跑起來，
+       但到底是 chunk 404、被劫持成 HTML、還是 module graph 在 import 期就拋錯（老瀏覽器
+       語法/API 不支援、某個 import 副作用崩了），完全分不出來，也就無從修。
+       main.jsx 自己的 error 監聽掛在 module 內，import 期就掛掉時根本來不及註冊。
+       這裡在【任何腳本之前】用捕獲階段收所有 error / unhandledrejection（含資源載入失敗），
+       存進記憶體 + localStorage，由 showStuckDiag 一併印出來。純記錄，不改任何行為。 -->
+  <script>
+    (function () {
+      var MAX = 5;
+      var KEY = 'nuojiji_boot_errors';
+      window.__nuojijiBootErrors = [];
+      function push(rec) {
+        try {
+          if (window.__nuojijiBootErrors.length >= MAX) return;
+          rec.at = Date.now();
+          window.__nuojijiBootErrors.push(rec);
+          try { localStorage.setItem(KEY, JSON.stringify(window.__nuojijiBootErrors)); } catch (_e) { }
+        } catch (_e) { }
+      }
+      window.__nuojijiRecordBootError = push;
+      window.addEventListener('error', function (e) {
+        try {
+          // 資源載入失敗（script/link/img）：event.target 是元素，沒有 message
+          var t = e && e.target;
+          if (t && t !== window && t.tagName) {
+            push({ k: 'res', tag: String(t.tagName).toLowerCase(), src: String(t.src || t.href || '').slice(-120) });
+            return;
+          }
+          var _m = String((e && e.message) || '');
+          var _f = String((e && e.filename) || '');
+          push({ k: 'err', m: _m.slice(0, 200), f: _f.slice(-80), l: (e && e.lineno) || 0 });
+          // 🩹 「快取裡的 JS 檔被截斷」專用信標（2026-09-09 線上事故）：
+          //   實錄 —— entry chunk 在伺服器上完好（content-length 對得上），但手機端每次
+          //   都拋 `SyntaxError: Unexpected EOF` @ assets/main-*.js:2，重注入三次全部
+          //   script-stall，按「徹底清除快取」也沒用 —— 因為壞掉的半截副本躺在瀏覽器的
+          //   【HTTP 磁碟快取】裡，那層不歸 Cache Storage / SW 管，清 SW 清不掉它；
+          //   而 index.html 帶 ?__retry= 換了網址能重抓，entry 的網址沒變 → 永遠吃同一份殘檔。
+          //   這裡先把「哪個檔壞了」記下來，交給下方 tryReinjectEntry 用 cache:'reload' 沖掉。
+          if (/SyntaxError|Unexpected EOF|Unexpected end of (input|script)|Invalid or unexpected token|illegal character/i.test(_m) && /\.js(\?|$)/i.test(_f)) {
+            try {
+              window.__nuojijiCorruptAssets = window.__nuojijiCorruptAssets || [];
+              if (window.__nuojijiCorruptAssets.indexOf(_f) < 0) window.__nuojijiCorruptAssets.push(_f);
+            } catch (_e2) { }
+          }
+        } catch (_e) { }
+      }, true);
+      window.addEventListener('unhandledrejection', function (e) {
+        try {
+          var r = e && e.reason;
+          push({ k: 'rej', m: String((r && (r.message || r)) || '').slice(0, 200) });
+        } catch (_e) { }
+      }, true);
+    })();
+  </script>
+  <!-- 🛟 localStorage 配額硬護欄（必須緊接黑盒、位於任何業務腳本之前）：
+       事故實錄（2026-09-07 真機截圖）：啟動卡在 db-ready，開機錯誤只有一條
+       `QuotaExceededError: The quota has been exceeded.` 來自 main-*.js，並且診斷自己
+       也標「⚠️LS寫入失敗」——localStorage 被寫滿後，啟動鏈上任何一處【沒包 try 的】
+       setItem 直接拋出未捕獲例外，整條掛載流程當場中斷 = 永久蝴蝶。
+       全專案有 200+ 處裸 setItem，逐處補 try 是打地鼠，這裡從 Storage.prototype 一次根治：
+         1. 寫不下 → 先驅逐可再生的大快取（IDB/SQLite 有正本）再重試一次；
+         2. 仍寫不下 → 【絕不拋出】，只記進 window.__nuojijiLsQuota 供診斷顯示。
+       語意變化僅限「配額爆掉時不再拋例外」，正常寫入路徑完全不碰，零回歸。 -->
+  <script>
+    (function () {
+      try {
+        var proto = window.Storage && window.Storage.prototype;
+        if (!proto || proto.__nuoQuotaGuarded) return;
+        var raw = proto.setItem;
+        // 可驅逐前綴：由低到高重要性，全都是 IDB / SQLite 有正本或可重新生成的快取
+        var EVICT = ['_cbg_', '_tc_', '_asc_', 'xinsheng_', 'chat_settings_', 'nuojiji_boot_timeline_prev'];
+        function isQuota(e) {
+          return !!e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014
+            || /quota/i.test(String(e.message || '')));
+        }
+        function evict(store, prefix, exceptKey) {
+          var doomed = [], i, k;
+          for (i = 0; i < store.length; i++) {
+            k = store.key(i);
+            if (k && k.indexOf(prefix) === 0 && k !== exceptKey) doomed.push(k);
+          }
+          for (i = 0; i < doomed.length; i++) { try { store.removeItem(doomed[i]); } catch (_e) { } }
+          return doomed.length;
+        }
+        proto.setItem = function (key, value) {
+          try {
+            return raw.call(this, key, value);
+          } catch (e) {
+            if (!isQuota(e)) throw e;   // 非配額錯誤照舊拋出，不掩蓋真問題
+            for (var i = 0; i < EVICT.length; i++) {
+              try { if (!evict(this, EVICT[i], String(key))) continue; } catch (_e1) { continue; }
+              try { return raw.call(this, key, value); } catch (_e2) { }
+            }
+            // 徹底寫不下：記錄現場（key + 大小 + 用量），但【不拋】，啟動鏈不許死在這
+            try {
+              var used = 0;
+              for (var j = 0; j < this.length; j++) {
+                var kk = this.key(j);
+                used += (kk || '').length + ((this.getItem(kk) || '').length);
+              }
+              window.__nuojijiLsQuota = {
+                key: String(key).slice(0, 60),
+                size: String(value == null ? '' : value).length,
+                usedKB: Math.round(used / 512),   // UTF-16：兩 byte 一字元
+                at: Date.now(),
+              };
+            } catch (_e3) { window.__nuojijiLsQuota = { key: String(key).slice(0, 60), at: Date.now() }; }
+            return undefined;
+          }
+        };
+        proto.__nuoQuotaGuarded = true;
+        // 🧹 開機主動洩壓：已經寫到接近配額（~5MB）的裝置，等到第一次 setItem 拋錯才清
+        //   已經來不及（那一拋可能就落在沒包 try 的地方）。開機先量一次，逼近上限就把
+        //   可再生快取全數驅逐，讓本次啟動有餘量可寫。全是 IDB/SQLite 有正本的快取，零資料損失。
+        try {
+          var used = 0, i, k;
+          for (i = 0; i < localStorage.length; i++) {
+            k = localStorage.key(i);
+            used += (k || '').length + ((localStorage.getItem(k) || '').length);
+          }
+          if (used > 2000000) {   // 字元數（UTF-16），約 4MB
+            var freed = 0;
+            for (i = 0; i < EVICT.length; i++) freed += evict(localStorage, EVICT[i], null);
+            window.__nuojijiLsPressure = { usedKB: Math.round(used / 512), evicted: freed, at: Date.now() };
+          }
+        } catch (_e0) { }
+      } catch (_e) { }
+    })();
+  </script>
+  <script>
+    (function () {
+      try {
+        var raw = localStorage.getItem('nuojiji_ui_scale');
+        var v = raw ? Number(raw) : 1;
+        if (!(isFinite(v) && v >= 0.5 && v <= 1.5)) v = 1;
+        window.__nuoVpScale = 1;
+        if (v === 1) return;
+        // 只有【会认 meta viewport 的移动端】走这条；桌面浏览器根本不解析 meta viewport，
+        // 桌面继续走旧的 root zoom 路径（桌面是现代 Chromium，zoom 会正确补偿视口单位，本就没问题）。
+        var ua = navigator.userAgent || '';
+        var mobile = /Android|iPhone|iPad|iPod|Mobile|HarmonyOS/i.test(ua) ||
+          ((navigator.maxTouchPoints || 0) > 1 && /Mac/i.test(navigator.platform || ''));
+        if (!mobile) return;
+        // 布局视口宽（CSS px，此刻 meta 还是 width=device-width、尚未缩放）。
+        // ⚠️ 用 documentElement.clientWidth 而【不是 screen.width】：screen.width 是整块屏幕，
+        //    WebView / WKWebView 未必占满屏（分屏、自由窗口、Stage Manager、部分 ROM 的侧边留白），
+        //    那种机器上按 screen.width 反算会把布局排得比可视区更宽 —— 表现就是
+        //    「右侧被裁掉、聊天列表的时间贴不到右边」。clientWidth 量的就是浏览器实际排版的宽度。
+        var de = document.documentElement;
+        var base = Math.round((de && de.clientWidth) || window.innerWidth ||
+          (window.screen && window.screen.width) || 0);
+        if (!(base > 200)) return;   // 量不到就老老实实 100%，绝不冒险
+        var m = document.getElementById('nuo-viewport');
+        if (!m) return;
+        // ⚠️ 必须显式写 initial-scale=v —— 见 App.jsx applyViewportScale 的详注：
+        //   省略它只在 Chrome 浏览器下会自动铺满，Android WebView（LoadWithOverviewMode=false）
+        //   会按 1:1 死排、完全不缩放，正是「APK 点哪个档位都一样大」的真因。
+        // ⚠️ 布局宽必须是整数（引擎会自己取整），而缩放倍率必须【由取整后的宽反推】：
+        //   w × s 要严格等于设备宽 base，否则整页坐标系相对物理像素偏移零点几 px，
+        //   所有元素边缘落在半个物理像素上 → 格子/卡片边界渗出底色的细黑线。
+        //   旧写法 width=round(base/v) 配 initial-scale=v，两者相乘回不到 base（例 393/0.9
+        //   → 437，437×0.9=393.3），这 0.3px 就是黑线的来源。
+        var w = Math.round(base / v);
+        var s = Math.round((base / w) * 10000) / 10000;
+        // minimum-scale 也必须显式写成 v：缩小档位时 v < 1，而各引擎（尤其 Android WebView）
+        // 默认把最小页面缩放钳在 1.0，不写就会被向上钳回 1.0 =「缩小点了没反应」。
+        m.setAttribute('content',
+          'width=' + w +
+          ', initial-scale=' + s + ', minimum-scale=' + s + ', maximum-scale=' + s +
+          ', user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content');
+        window.__nuoVpScale = s;   // 实际生效的是 s（由取整后的布局宽反推），不是原始 v
+        // 鎖定首幀量到的設備寬作為基準：之後 App.jsx 的 readViewportBaseWidth 一律復用，
+        // 避免手機 Chrome 從後台恢復時派的 resize 拿到中間態 clientWidth 反覆反算、逐次放大。
+        window.__nuoVpBaseW = base;
+        window.__nuoVpBaseOrient = ((de && de.clientHeight) || window.innerHeight || 0) < base ? 'l' : 'p';
+      } catch (e) { }
+    })();
+  </script>
+  <title>糯嘰機 糯叽机 nuojiji</title>
+
+  <!-- 禁止搜尋引擎收錄 -->
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex" />
+  <meta name="googlebot" content="noindex, nofollow" />
+  <meta name="bingbot" content="noindex, nofollow" />
+  <meta name="baiduspider" content="noindex, nofollow" />
+  <meta name="Baiduspider" content="noarchive, nosnippet" />
+  <meta name="sogou spider" content="noindex, nofollow" />
+  <meta name="360spider" content="noindex, nofollow" />
+  <meta name="Yisouspider" content="noindex, nofollow" />
+  <meta name="Sosospider" content="noindex, nofollow" />
+  <meta name="YoudaoBot" content="noindex, nofollow" />
+  <meta name="Bytespider" content="noindex, nofollow" />
+
+  <!-- 桌面 widget 常用圖床 preconnect：省 DNS+TLS 1–2 秒
+       LCP 元素往往是用戶在 Polaroid / Note / Image widget 設的圖床圖，
+       這些 host 在首屏就會被請求，提早建連能顯著改善 P75/P90 -->
+  <link rel="preconnect" href="https://i.postimg.cc" crossorigin />
+  <link rel="preconnect" href="https://pic1.imgdb.cn" crossorigin />
+  <link rel="preconnect" href="https://nos.netease.com" crossorigin />
+  <link rel="preconnect" href="https://img.heliar.top" crossorigin />
+  <link rel="dns-prefetch" href="https://i.postimg.cc" />
+  <link rel="dns-prefetch" href="https://pic1.imgdb.cn" />
+  <link rel="dns-prefetch" href="https://nos.netease.com" />
+  <link rel="dns-prefetch" href="https://img.heliar.top" />
+  <link rel="dns-prefetch" href="https://pic5.fukit.cn" />
+  <link rel="dns-prefetch" href="https://pic1.imgdb.cc" />
+
+  <!-- Favicon for browsers -->
+  <link rel="icon" type="image/png" sizes="512x512" href="./pwa-512x512.png?v=2" />
+  <link rel="icon" type="image/png" href="./pwa-512x512.png?v=2" />
+  <link rel="shortcut icon" href="./pwa-512x512.png?v=2" />
+
+  <!-- theme-color：部分 Android WebView 不支援 rgba 透明，會 fallback 成純黑導致系統狀態列「全黑什麼都看不到」
+       改為提供深淺兩個 media-queried 預設值，並由下方 inline script 根據用戶 darkMode 偏好覆寫
+       注意：
+       - 淺色用 #fafafa（不用 #ffffff）：華為 EMUI/HarmonyOS 對純白 theme-color 在某些版本會把系統狀態列 icon 也推斷成白色 → 整條看不到。微灰色能逼出深色 icon。
+       - 深色用 #2c2c2e（不用 #000000 / #1a1a1a）：華為 ROM 對純黑/極深 theme-color 會 fallback 成「黑底黑 icon」(就是用戶回報的「黑色一條看不到時間/電量」)。給「iOS dark grouped」這級的深灰才能穩定觸發白色 icon。 -->
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fafafa" />
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#2c2c2e" />
+  <script>
+    // 🔧 APK Discord OAuth 回跳跳板（必須在 React bundle / SW 接管渲染之前執行）
+    // 背景：APK 用 Capacitor Browser 開外部 Chrome 跑 Discord OAuth，PB hook 完成後
+    //       redirect 回 https://nuojiji.app?capacitor=android&pb_token=...&pb_user=...
+    //       本來靠 React 裡 useAuth 的 tryConsumePbCallback 偵測 capacitor=android 再 bounce，
+    //       但要等整個 React bundle 下載+掛載+effect 跑完才 bounce → 用戶先看到「網頁版糯叽机」，
+    //       且裝了 PWA 時這個 URL 可能被 SW 接管直接渲染網頁版，bounce 永遠不發生。
+    // 修法：在文檔解析期就攔截 capacitor 回跳參數，立刻用 intent:// 唤起 APK，根本不啟動 React。
+    (function () {
+      try {
+        var sp = new URLSearchParams(window.location.search);
+        var cap = sp.get('capacitor');
+        var tok = sp.get('pb_token');
+        var usr = sp.get('pb_user');
+        // 只攔「原生回跳」：capacitor=android/ios + 帶 token；普通網頁登入無這些參數，不受影響
+        if ((cap === 'android' || cap === 'ios') && tok && usr) {
+          // 已經在原生 WebView 裡（極少數：壳內直接跑此頁）→ 不跳板，交給 React 直接消費
+          var inCap = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+          if (!inCap) {
+            // 標記跳板已觸發，main.jsx 跳過 React 掛載（mount 點已被改寫掉）
+            window.__nuoOauthBounce = true;
+            var tokEnc = encodeURIComponent(tok);
+            var usrEnc = encodeURIComponent(usr);
+            var schemeUrl = 'app.nuojiji://auth-callback?pb_token=' + tokEnc + '&pb_user=' + usrEnc;
+            document.documentElement.innerHTML =
+              '<body style="margin:0;font-family:system-ui;text-align:center;padding:60px 20px;color:#333;background:#fafafa">' +
+              '<h2 style="margin-bottom:16px">登入成功！</h2>' +
+              '<p style="color:#666;margin-bottom:24px">正在返回糯叽机 App…</p>' +
+              '<p style="color:#999;font-size:13px">如果没有自动跳转，请点击下方按钮：</p>' +
+              '<a id="nuo-back" href="' + schemeUrl + '" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#5865F2;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">返回 App</a>' +
+              '</body>';
+            if (cap === 'android') {
+              // Android：intent:// 強制按 package 找 APK，PWA / 普通瀏覽器都攔不住
+              var intentUrl = 'intent://auth-callback?pb_token=' + tokEnc + '&pb_user=' + usrEnc +
+                '#Intent;scheme=app.nuojiji;package=app.nuojiji;' +
+                'S.browser_fallback_url=' + encodeURIComponent('https://nuojiji.app/?need_apk=1') + ';end';
+              document.getElementById('nuo-back').setAttribute('href', intentUrl);
+              setTimeout(function () { try { window.location.replace(intentUrl); } catch (e) {} }, 80);
+              // intent:// 失敗（Firefox/部分國產瀏覽器不識別）→ 再試純 scheme
+              setTimeout(function () { try { window.location.replace(schemeUrl); } catch (e) {} }, 1400);
+            } else {
+              // iOS：Safari 認 custom scheme，直接跳
+              setTimeout(function () { try { window.location.replace(schemeUrl); } catch (e) {} }, 80);
+            }
+            // 阻止 React bundle 繼續初始化（已改寫 documentElement，main.jsx 即便跑也無掛載點）
+            throw new Error('__nuo_oauth_bounce__');
+          }
+        }
+      } catch (e) {
+        if (e && e.message === '__nuo_oauth_bounce__') {
+          // 預期的中止信號，吞掉
+        }
+      }
+    })();
+  </script>
+  <script>
+    // 根據用戶手動設定的 darkMode 偏好覆寫 theme-color（早於 React 掛載，避免閃白/閃黑）
+    // localStorage 鍵 'darkMode' 由 useGlobalSetting('darkMode') 寫入
+    (function () {
+      try {
+        var raw = localStorage.getItem('darkMode');
+        var isDark = raw === 'true' || raw === '"true"';
+        // 顏色見上方 meta 註解，不可用純黑/純白
+        var color = isDark ? '#2c2c2e' : '#fafafa';
+        var metas = document.querySelectorAll('meta[name="theme-color"]');
+        metas.forEach(function (m) { m.remove(); });
+        var meta = document.createElement('meta');
+        meta.name = 'theme-color';
+        meta.content = color;
+        document.head.appendChild(meta);
+      } catch (e) { /* ignore */ }
+    })();
+  </script>
+  <!-- PWA manifest 按 UA 分流注入：
+       國產 ROM (vivo/小米/華為/OPPO/榮耀/魅族/realme/一加國行) 對 display:fullscreen 的實現會留狀態欄黑條占位
+       (非真隱藏)，造成「黑邊一會顯一會不顯」(系統短暫退出 immersive 露原生狀態欄)。
+       這批用戶改注入 manifest-cn.webmanifest (display:standalone)，狀態欄穩定顯示。
+       其餘用戶 (原生 Android / Chrome desktop / 國外 ROM) 注入主 manifest.webmanifest (display:fullscreen)，保留默認沉浸感。
+       iOS 不讀 manifest 的 display，注入哪個都無影響 — 由 apple-mobile-web-app-* meta 控制。
+       注意：WebAPK 安裝時冻结此 manifest，分流只對「未安裝/新安裝」用戶生效；老用戶需卸載重裝 PWA 才會拿到新版。 -->
+  <script>
+    (function () {
+      try {
+        var ua = navigator.userAgent || '';
+        // 國產 ROM UA 關鍵詞 — MIUI/HarmonyOS/EMUI 為系統標識；
+        // VivoBrowser/HeyTapBrowser 為 ROM 自帶瀏覽器；
+        // Redmi/HUAWEI/HONOR/OPPO/vivo/realme 為設備型號標識
+        var isCnRom = /MIUI|HarmonyOS|EMUI|HUAWEI|HONOR|HONORBrowser|VivoBrowser|HeyTapBrowser|HeyTap|\bOPPO\b|\bvivo\b|Redmi|XiaoMi|realme|Meizu/i.test(ua);
+        var href = isCnRom ? '/doQvQ_doorkicker_6.9.89/manifest-cn.webmanifest' : '/doQvQ_doorkicker_6.9.89/manifest.webmanifest';
+        var link = document.createElement('link');
+        link.rel = 'manifest';
+        link.href = href;
+        document.head.appendChild(link);
+      } catch (e) { /* ignore */ }
+    })();
+  </script>
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="糯嘰機" />
+  <link rel="apple-touch-icon" href="./pwa-512x512.png?v=2" />
+
+  <!-- iOS 啟動畫面 - 使用 pwa-512x512.png 作為啟動圖像 -->
+  <!-- iPhone X/XS/11 Pro (1125x2436) -->
+  <link rel="apple-touch-startup-image" href="./pwa-512x512.png?v=2"
+    media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
+  <!-- iPhone XS Max/11 Pro Max (1242x2688) -->
+  <link rel="apple-touch-startup-image" href="./pwa-512x512.png?v=2"
+    media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3)">
+  <!-- iPhone XR/11 (828x1792) -->
+  <link rel="apple-touch-startup-image" href="./pwa-512x512.png?v=2"
+    media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2)">
+  <!-- iPhone 12/12 Pro/13/13 Pro/14 (1170x2532) -->
+  <link rel="apple-touch-startup-image" href="./pwa-512x512.png?v=2"
+    media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
+  <!-- iPhone 12/13/14 Pro Max (1284x2778) -->
+  <link rel="apple-touch-startup-image" href="./pwa-512x512.png?v=2"
+    media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)">
+  <!-- iPhone 14 Pro (1179x2556) -->
+  <link rel="apple-touch-startup-image" href="./pwa-512x512.png?v=2"
+    media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
+  <!-- iPhone 14 Pro Max (1290x2796) -->
+  <link rel="apple-touch-startup-image" href="./pwa-512x512.png?v=2"
+    media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)">
+  <!-- 通用回退 -->
+  <link rel="apple-touch-startup-image" href="./pwa-512x512.png?v=2">
+
+  <!-- Google Fonts 已全部移除：
+       - Latin 字體（Cinzel/Montserrat/Cormorant/Dancing Script/Playfair Display 等）
+         改用 @fontsource 本地 bundle，跟著各自 lazy chunk 一起載入
+       - CJK 字體（Noto Serif/Sans TC/SC）改用 src/style.css 內的 @font-face shim，
+         直接 local() 對應到使用者作業系統內建的中文字體（PingFang / Microsoft YaHei 等）
+       - Roboto / Zhi Mang Xing 已經沒有實際使用，僅作 fallback，移除即可
+       這樣大陸用戶不再依賴任何被牆的 Google CDN，首屏也不需要任何外部 CSS 請求 -->
+  <!-- Flaticon 圖標已移除：原本只在 CalendarApp.jsx 用了 4 個 fi-* icon，
+       現已全部改用 lucide-react 對應圖標，省一整個 CDN 字體請求 -->
+
+  <style>
+    /* Prevent white flash during load */
+    html,
+    body {
+      background-color: #ffffff !important;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* 深色模式：底色跟隨系統，避免開屏一道白光（原生啟動底色同步在 values-night / LaunchScreen 改） */
+    @media (prefers-color-scheme: dark) {
+
+      html,
+      body {
+        background-color: #0e0e10 !important;
+      }
+    }
+
+    /* 彻底消除所有元素的点击/聚焦黑框 */
+    *,
+    *:focus,
+    *:focus-visible,
+    *:focus-within,
+    *:active {
+      outline: none !important;
+      -webkit-tap-highlight-color: transparent !important;
+      -webkit-focus-ring-color: transparent !important;
+    }
+
+    /* Loading screen with butterfly animation */
+    #app-loading-overlay {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      /* 使用多种高度单位确保在各种浏览器/设备上都能覆盖完整视口 */
+      height: 100%;
+      /* 向四周扩展以确保覆盖安全区（iOS 首幀高度偏短：由 --boot-h 鎖到 screen.height，見開屏腳本） */
+      min-height: var(--boot-h, -webkit-fill-available);
+      background-color: var(--boot-bg, #ffffff);
+      z-index: 99999;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transition: opacity 0.25s ease;
+      /* 确保不受父元素影响 */
+      overflow: hidden;
+    }
+
+    #app-loading-overlay.fade-out {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* 在 loading 期间隐藏所有底层内容，防止穿帮 */
+    body.app-loading #nuo-os-root {
+      opacity: 0 !important;
+      visibility: hidden !important;
+    }
+
+    body.app-loading #desktop-dock,
+    body.app-loading #home-screen-pages {
+      opacity: 0 !important;
+      visibility: hidden !important;
+    }
+
+    /* ---- 開屏動畫（兩款，設定頁可切，localStorage nuojiji_boot_style）----
+         節奏按「真實載入 1～2 秒」設計：所有重點 0.7s 內出齊，收場由 app-ready 觸發、早到早走。
+         lockscreen：真・鎖屏——晨光天空壁紙、大時鐘（真時間）、推播彈入，
+                     app-ready 時整個鎖屏「上滑解鎖」露出主頁。
+         pixel     ：像素 RPG——光圈揭幕進夜晚地圖（夜→黎明、流星、視差山、螢火蟲）、
+                     小糯嘰蹦兩下、對話框快速打字，app-ready 時光圈收攏露出主頁。
+       設計約束：純 CSS + 幾行 JS，零圖片、零 backdrop-filter、零 filter blur、不載外部字體。 */
+    :root {
+      --boot-bg: #ffffff;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --boot-bg: #0e0e10;
+      }
+    }
+
+    /* ⚠️ iOS 首幀陷阱：WKWebView 第一幀的視口高度偏短、env(safe-area-*) 解析成 0，
+       下一幀才長到全螢幕 → 任何「貼底 / 吃 env」的元素都會閃一下位移。
+       解法：舞台不用 inset:0，改成貼頂 + 固定高度（iOS 由下方腳本用 screen.height 鎖死），
+       安全區用 --boot-safe-t/b（iOS 由腳本按機型給定值）取代 env()。其他平台回退 100% / env()。 */
+    .boot-stage {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: var(--boot-h, 100%);
+      overflow: hidden;
+      -webkit-user-select: none;
+      user-select: none;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "PingFang TC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+    }
+
+    .boot-stage[hidden] {
+      display: none !important;
+    }
+
+    /* 還原提示 / 卡住診斷 / 兜底重試鈕要壓在動畫上面 */
+    #app-loading-overlay > p,
+    #app-loading-overlay > pre,
+    #app-loading-overlay > button {
+      z-index: 2;
+    }
+
+    /* ===== lockscreen ===== */
+    .boot-lock {
+      background: #f6dde5;
+      box-shadow: 0 -10px 40px rgba(120, 50, 80, .25);
+    }
+
+    .boot-lock .lk-sky {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, #ffd9e4 0%, #f6d3ee 38%, #dbe0ff 100%);
+    }
+
+    .boot-lock .lk-sun {
+      position: absolute;
+      left: 50%;
+      top: 38%;
+      width: 46vw;
+      height: 46vw;
+      margin: -23vw 0 0 -23vw;
+      border-radius: 50%;
+      background: radial-gradient(circle, #fff5d6 0, #ffd6d6 45%, rgba(255, 214, 214, 0) 70%);
+      animation: bootSun 6s ease-in-out infinite;
+    }
+
+    .boot-lock .lk-cloud {
+      position: absolute;
+      height: 26px;
+      border-radius: 30px;
+      background: rgba(255, 255, 255, .75);
+      animation: bootDrift 22s linear infinite;
+    }
+
+    .boot-lock .lk-cloud::before,
+    .boot-lock .lk-cloud::after {
+      content: "";
+      position: absolute;
+      bottom: 0;
+      border-radius: 50%;
+      background: inherit;
+    }
+
+    .boot-lock .lk-cloud::before { left: 18%; width: 34px; height: 34px; bottom: 8px; }
+    .boot-lock .lk-cloud::after { left: 50%; width: 26px; height: 26px; bottom: 10px; }
+    .boot-lock .lk-cloud.c1 { left: -90px; top: 52%; width: 90px; }
+    .boot-lock .lk-cloud.c2 { left: -140px; top: 66%; width: 120px; opacity: .7; animation-duration: 30s; animation-delay: -14s; }
+    .boot-lock .lk-cloud.c3 { left: -70px; top: 44%; width: 60px; opacity: .5; animation-duration: 18s; animation-delay: -9s; }
+
+    .boot-lock .lk-clock {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(9% + var(--boot-safe-t, env(safe-area-inset-top, 0px)));
+      text-align: center;
+      color: #6b3f52;
+      opacity: 0;
+      transform: translateY(-8px);
+      animation: bootClockIn .45s cubic-bezier(.2, .8, .2, 1) .05s forwards;
+    }
+
+    .boot-lock .lk-clock i {
+      display: block;
+      font-style: normal;
+      font-size: 14px;
+      font-weight: 500;
+      letter-spacing: .06em;
+      opacity: .8;
+    }
+
+    .boot-lock .lk-clock b {
+      display: block;
+      font: 200 clamp(64px, 20vw, 96px)/1.05 -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
+      letter-spacing: -.02em;
+      font-variant-numeric: tabular-nums;
+      margin-top: 2px;
+    }
+
+    /* 推播卡：白磨砂感、App 圖示風頭像 */
+    .boot-lock .lk-stack {
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      top: calc(9% + var(--boot-safe-t, env(safe-area-inset-top, 0px)) + clamp(140px, 36vw, 190px));
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+
+    .boot-lock .lk-ntf {
+      position: relative;
+      padding: 11px 13px 11px 11px;
+      border-radius: 22px;
+      background: linear-gradient(160deg, rgba(255, 255, 255, .82), rgba(255, 255, 255, .6));
+      box-shadow: 0 1px 0 rgba(255, 255, 255, .9) inset, 0 10px 30px rgba(140, 70, 100, .14);
+      display: flex;
+      gap: 11px;
+      align-items: center;
+      transform: translateY(-28px) scale(.96);
+      opacity: 0;
+      animation: bootNtfIn .5s cubic-bezier(.3, 1.4, .5, 1) .3s forwards;
+    }
+
+    .boot-lock .lk-ntf.n2 { animation-delay: .5s; }
+    .boot-lock .lk-ntf.n3 { animation-delay: .7s; }
+
+    /* 其它 App 的圖示：朋友圈（橘粉）/ 日曆（藍紫） */
+    .boot-lock .lk-av.moments { background: linear-gradient(150deg, #ffe9d6 0%, #ffc9b0 55%, #f7a58f 100%); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), inset 0 -6px 10px rgba(226, 132, 100, .18), 0 3px 8px rgba(214, 120, 100, .18); }
+    .boot-lock .lk-av.cal { background: linear-gradient(150deg, #eae6ff 0%, #cfc7ff 55%, #b3a8f5 100%); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), inset 0 -6px 10px rgba(120, 100, 200, .18), 0 3px 8px rgba(120, 100, 200, .18); }
+    .boot-lock .lk-av.moments svg, .boot-lock .lk-av.cal svg { width: 20px; height: 20px; }
+
+    .boot-lock .lk-av {
+      position: relative;
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      flex: none;
+      overflow: hidden;
+      background: linear-gradient(150deg, #ffe3ea 0%, #ffc4d4 55%, #f7a9c2 100%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), inset 0 -6px 10px rgba(226, 132, 160, .18), 0 3px 8px rgba(214, 120, 145, .18);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .boot-lock .lk-av svg { width: 23px; height: 23px; display: block; }
+    .boot-lock .lk-av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+    .boot-lock .lk-tx {
+      min-width: 0;
+      flex: 1;
+      color: #4a3540;
+    }
+
+    .boot-lock .lk-tx b {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      font-size: 13.5px;
+      font-weight: 600;
+    }
+
+    .boot-lock .lk-tx b s {
+      text-decoration: none;
+      font-size: 9.5px;
+      font-weight: 500;
+      letter-spacing: .18em;
+      color: #d97a95;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: rgba(217, 122, 149, .12);
+    }
+
+    .boot-lock .lk-tx b span {
+      margin-left: auto;
+      font-weight: 400;
+      opacity: .45;
+      font-size: 10.5px;
+    }
+
+    .boot-lock .lk-tx em {
+      font-style: normal;
+      display: block;
+      font-size: 12.5px;
+      line-height: 1.4;
+      opacity: .85;
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .boot-lock .lk-hint {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: calc(80px + var(--boot-safe-b, env(safe-area-inset-bottom, 0px)));
+      text-align: center;
+      color: #6b3f52;
+      font-size: 11.5px;
+      font-weight: 500;
+      letter-spacing: .06em;
+      opacity: 0;
+      animation: bootFadeIn .3s ease .6s forwards;
+    }
+
+    .boot-lock .lk-hint::before {
+      content: "";
+      display: block;
+      width: 8px;
+      height: 8px;
+      margin: 0 auto 8px;
+      border-left: 1.5px solid #6b3f52;
+      border-top: 1.5px solid #6b3f52;
+      transform: rotate(45deg);
+      animation: bootHintUp .9s ease-in-out infinite;
+    }
+
+    .boot-lock .lk-dock {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: calc(24px + var(--boot-safe-b, env(safe-area-inset-bottom, 0px)));
+      display: flex;
+      justify-content: space-between;
+      padding: 0 30px;
+      opacity: 0;
+      animation: bootFadeIn .3s ease .35s forwards;
+    }
+
+    .boot-lock .lk-dock i {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, .5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #8c5a70;
+    }
+
+    .boot-lock .lk-dock svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+    .boot-lock .lk-bar {
+      position: absolute;
+      left: 50%;
+      bottom: calc(8px + var(--boot-safe-b, env(safe-area-inset-bottom, 0px)));
+      width: 120px;
+      height: 4px;
+      margin-left: -60px;
+      border-radius: 2px;
+      background: rgba(74, 53, 64, .35);
+    }
+
+    /* App ready → 鎖屏整個上滑解鎖，而不是淡出 */
+    /* 收場三拍（後段是重點，字標要站得住）：
+         鎖屏上滑 / 光圈收攏 .35s → NUOJIJI 字標從字距鬆開落定、停到 .95s → 整體淡出 .25s，
+       總長 1.2s；overlay 在 1.3s 後移除。開屏本身不等，只有這段收場是固定的。 */
+    #app-loading-overlay.fade-out.boot-lock-mode,
+    #app-loading-overlay.fade-out.boot-pixel-mode {
+      opacity: 1;
+      transition: none;
+      animation: bootOvOut .25s ease .95s forwards;
+    }
+
+    .boot-end {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(ellipse 90% 60% at 50% 42%, #fff4f6, #ffe7ec 75%);
+    }
+
+    .boot-end b {
+      font: 200 clamp(28px, 9vw, 44px)/1 -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
+      letter-spacing: .42em;
+      text-indent: .42em;
+      color: #d97a95;
+    }
+
+    .boot-end i {
+      font: 300 clamp(9px, 2.8vw, 12px)/1 -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
+      letter-spacing: .34em;
+      text-indent: .34em;
+      color: rgba(217, 122, 149, .6);
+      margin-top: 14px;
+      font-style: normal;
+    }
+
+    .boot-end.dark {
+      background: radial-gradient(ellipse 90% 60% at 50% 42%, #2a1f4e, #120f2a 75%);
+    }
+
+    .boot-end.dark b { color: #ffe3ea; text-shadow: 0 0 24px rgba(255, 160, 190, .45); }
+    .boot-end.dark i { color: rgba(255, 179, 198, .65); font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+    .boot-end b, .boot-end i {
+      opacity: 0;
+    }
+
+    /* 字標：字距從鬆到緊「收攏」落定，比單純淡入更有落款感 */
+    #app-loading-overlay.fade-out .boot-end b {
+      animation: bootEndWord .7s cubic-bezier(.2, .8, .2, 1) .1s forwards;
+    }
+
+    #app-loading-overlay.fade-out .boot-end i {
+      animation: bootEndIn .5s ease .35s forwards;
+    }
+
+    /* 字標下方一道細線從中間向兩側拉開，給停留那 0.6s 一個「還在動」的細節 */
+    .boot-end u {
+      display: block;
+      width: 0;
+      height: 1px;
+      margin-top: 16px;
+      background: currentColor;
+      opacity: .45;
+      color: #d97a95;
+    }
+
+    .boot-end.dark u { color: #ffb3c6; }
+
+    #app-loading-overlay.fade-out .boot-end u {
+      animation: bootEndLine .6s cubic-bezier(.2, .8, .2, 1) .3s forwards;
+    }
+
+    #app-loading-overlay.fade-out .boot-lock {
+      animation: bootUnlock .35s cubic-bezier(.7, 0, .2, 1) forwards;
+    }
+
+    /* ===== pixel ===== */
+    .boot-pixel {
+      background: #1b1638;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Courier New", monospace;
+      clip-path: circle(0 at 50% 60%);
+      animation: bootIris .35s ease-out forwards;
+    }
+
+    #app-loading-overlay.fade-out .boot-pixel {
+      animation: bootIrisOut .32s ease-in forwards;
+    }
+
+    .boot-pixel .px-sky {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, #120f2a 0%, #2a1f4e 45%, #6a3d6e 75%, #f08a8a 100%);
+    }
+
+    .boot-pixel .px-sky2 {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, #5e5aa8 0%, #c97fa8 50%, #ffb98a 100%);
+      opacity: 0;
+      animation: bootFadeIn 1.6s ease .3s forwards;
+    }
+
+    .boot-pixel .px-star {
+      position: absolute;
+      width: 2px;
+      height: 2px;
+      background: #fff;
+      animation: bootTwinkle 2s steps(1) infinite;
+    }
+
+    .boot-pixel .px-shoot {
+      position: absolute;
+      left: 72%;
+      top: 12%;
+      width: 70px;
+      height: 1px;
+      background: linear-gradient(90deg, #fff, rgba(255, 255, 255, 0));
+      transform: rotate(30deg);
+      opacity: 0;
+      animation: bootShoot 2.4s linear .2s infinite;
+    }
+
+    .boot-pixel .px-moon {
+      position: absolute;
+      right: 15%;
+      top: calc(11% + var(--boot-safe-t, env(safe-area-inset-top, 0px)));
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #ffe6a8;
+      box-shadow: 0 0 0 6px rgba(255, 230, 168, .12), 0 0 30px rgba(255, 230, 168, .3);
+      animation: bootMoonSet 2.4s ease-in .2s forwards;
+    }
+
+    /* 場景基準：垂直置中偏下 */
+    .boot-pixel .px-scene {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: calc(150px + var(--boot-safe-b, env(safe-area-inset-bottom, 0px)));
+      height: 200px;
+      --px-scale: 1;
+      transform: scale(var(--px-scale));
+      transform-origin: 50% 76px;   /* 以地平線為基準縮放，地面永遠貼底 */
+    }
+
+    @media (min-width: 430px) { .boot-pixel .px-scene { --px-scale: 1.15; } }
+    @media (min-width: 600px) { .boot-pixel .px-scene { --px-scale: 1.6; } }
+    @media (max-width: 340px) { .boot-pixel .px-scene { --px-scale: .88; } }
+    @media (min-aspect-ratio: 9/19) and (max-aspect-ratio: 9/16) and (min-height: 760px) { .boot-lock .lk-clock { top: calc(11% + var(--boot-safe-t, env(safe-area-inset-top, 0px))); } .boot-lock .lk-stack { top: calc(11% + var(--boot-safe-t, env(safe-area-inset-top, 0px)) + clamp(150px, 38vw, 200px)); } }
+    @media (max-height: 640px) { .boot-lock .lk-clock b { font-size: 60px; } .boot-lock .lk-stack { top: calc(9% + var(--boot-safe-t, env(safe-area-inset-top, 0px)) + 128px); } }
+    @media (max-height: 640px) { .boot-pixel .px-title { top: calc(14% + var(--boot-safe-t, env(safe-area-inset-top, 0px))); } }
+
+    .boot-pixel .px-m {
+      position: absolute;
+      left: -30vw;
+      right: -30vw;
+      height: 120px;
+      top: -10px;
+    }
+
+    .boot-pixel .px-m i {
+      position: absolute;
+      bottom: 0;
+      width: 0;
+      height: 0;
+      border-left: 26vw solid transparent;
+      border-right: 26vw solid transparent;
+    }
+
+    .boot-pixel .px-m.far i { border-bottom: 24vw solid #2f2454; }
+    .boot-pixel .px-m.near i { border-bottom: 17vw solid #45336b; }
+    .boot-pixel .px-m.far { animation: bootPara 14s linear infinite; }
+    .boot-pixel .px-m.near { animation: bootPara 8s linear infinite; top: 20px; }
+    .boot-pixel .px-m.far { top: 6px; }
+
+    .boot-pixel .px-grass {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 68px;
+      height: 8px;
+      background: repeating-linear-gradient(90deg, transparent 0 10px, #8fcf9a 10px 12px, transparent 12px 14px, #7bbf87 14px 16px, transparent 16px 26px);
+    }
+
+    .boot-pixel .px-ground {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 76px;
+      height: 120vh;   /* 鋪到螢幕底，不讓天色從地面下方漏出來 */
+      background: repeating-linear-gradient(90deg, #5a3f6e 0 8px, #674b7c 8px 16px);
+      border-top: 3px solid #a97cb8;
+    }
+
+    /* 螢火蟲：柔光點漂 */
+    .boot-pixel .px-ff {
+      position: absolute;
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: #ffe9a8;
+      box-shadow: 0 0 8px 2px rgba(255, 233, 168, .5);
+      opacity: 0;
+      animation: bootFirefly 5s ease-in-out infinite;
+    }
+
+    /* 8×7 像素糯嘰：box-shadow 拼出來，已在場、蹦兩下 */
+    .boot-pixel .px-pet {
+      position: absolute;
+      left: calc(50% - 22px);
+      top: 30px;
+      width: 6px;
+      height: 6px;
+      animation: bootHop .5s steps(3) .35s 2, bootBob .3s steps(2) infinite;
+    }
+
+    .boot-pixel .px-pet i {
+      position: absolute;
+      left: -12px;
+      width: 6px;
+      height: 6px;
+      background: #fff;
+      box-shadow:
+        12px 0 #fff, 18px 0 #fff, 24px 0 #fff,
+        6px 6px #fff, 12px 6px #fff, 18px 6px #fff, 24px 6px #fff, 30px 6px #fff,
+        0 12px #fff, 6px 12px #fff, 12px 12px #2d1f3a, 18px 12px #fff, 24px 12px #fff, 30px 12px #2d1f3a, 36px 12px #fff,
+        0 18px #fff, 6px 18px #ff99aa, 12px 18px #fff, 18px 18px #fff, 24px 18px #fff, 30px 18px #ff99aa, 36px 18px #fff,
+        0 24px #fff, 6px 24px #fff, 12px 24px #fff, 18px 24px #fff, 24px 24px #fff, 30px 24px #fff, 36px 24px #fff,
+        6px 30px #fff, 12px 30px #fff, 18px 30px #fff, 24px 30px #fff, 30px 30px #fff;
+    }
+
+    .boot-pixel .px-bub {
+      position: absolute;
+      left: calc(50% + 24px);
+      top: -4px;
+      padding: 4px 7px;
+      background: #fff;
+      color: #e2607f;
+      font-size: 12px;
+      border: 2px solid #2d1f3a;
+      box-shadow: 2px 2px 0 #2d1f3a;
+      opacity: 0;
+      transform: scale(0);
+      transform-origin: 0 100%;
+      animation: bootBubIn .3s cubic-bezier(.34, 1.6, .6, 1) .45s forwards;
+    }
+
+    /* 現代標題疊在像素世界上 */
+    .boot-pixel .px-title {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(26% + var(--boot-safe-t, env(safe-area-inset-top, 0px)));
+      text-align: center;
+      opacity: 0;
+      animation: bootTitleIn .6s cubic-bezier(.2, .8, .2, 1) .3s forwards;
+    }
+
+    .boot-pixel .px-title b {
+      display: block;
+      font: 200 clamp(26px, 8.5vw, 40px)/1 -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
+      letter-spacing: .42em;
+      text-indent: .42em;
+      color: #fff;
+      text-shadow: 0 2px 20px rgba(255, 180, 200, .5);
+    }
+
+    .boot-pixel .px-title i {
+      display: block;
+      font: italic 300 13px/1 Georgia, "Times New Roman", serif;
+      letter-spacing: .2em;
+      color: rgba(255, 230, 240, .8);
+      margin-top: 10px;
+    }
+
+    .boot-pixel .px-title u {
+      display: block;
+      width: 26px;
+      height: 1px;
+      background: rgba(255, 255, 255, .6);
+      margin: 12px auto 0;
+    }
+
+    /* 對話框 + 選項游標 */
+    .boot-pixel .px-box {
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      bottom: calc(26px + var(--boot-safe-b, env(safe-area-inset-bottom, 0px)));
+      min-height: 116px;
+      background: #1d1a2e;
+      border: 3px solid #fff;
+      box-shadow: 0 0 0 3px #1d1a2e, 0 0 0 5px #a97cb8;
+      padding: 11px 16px 14px;
+      box-sizing: border-box;
+      color: #fff;
+      font-size: clamp(13px, 3.8vw, 17px);
+      line-height: 1.65;
+      opacity: 0;
+      animation: bootFadeIn .01s steps(1) .45s forwards;
+    }
+
+    .boot-pixel .px-nm { color: #ffb3c6; font-size: 11.5px; }
+
+    .boot-pixel .px-opt {
+      display: flex;
+      gap: 18px;
+      margin-top: 4px;
+      font-size: 12.5px;
+      opacity: 0;
+      animation: bootFadeIn .01s steps(1) .85s forwards;
+    }
+
+    .boot-pixel .px-opt span::before { content: "▶ "; color: #ffe6a8; }
+    .boot-pixel .px-opt span + span::before { content: "\00a0\00a0 "; }
+    .boot-pixel .px-opt span:first-child { animation: bootCursor .8s steps(1) .85s infinite; }
+
+    /* ===== butterfly（原版小蝴蝶，Butterfly loader by WerlynDev - Uiverse.io） ===== */
+    .boot-butterfly {
+      background: var(--boot-bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .boot-butterfly .loader {
+      --sizeLoader: 60px;
+      --sizeLoaderHalf: calc(var(--sizeLoader) / 2);
+      display: flex;
+      position: relative;
+      flex-direction: row;
+      justify-content: center;
+      align-items: center;
+      width: var(--sizeLoader);
+      height: var(--sizeLoader);
+      right: var(--sizeLoaderHalf);
+      transform-origin: center right;
+      animation: bootMoveAround 2s linear infinite;
+    }
+
+    .boot-butterfly .loader svg { fill: var(--boot-ink, #000); }
+    .boot-butterfly .loader svg:nth-child(1) { position: relative; height: 100%; left: 2%; transform-origin: center right; animation: bootWing .5s ease-in-out infinite; }
+    .boot-butterfly .loader svg:nth-child(2) { height: 50%; }
+    .boot-butterfly .loader svg:nth-child(3) { position: relative; height: 100%; left: -2%; transform-origin: center left; animation: bootWing .5s ease-in-out infinite; }
+
+    @media (prefers-color-scheme: dark) { .boot-butterfly { --boot-ink: #f2f2f4; } }
+    @keyframes bootWing { 0%, 100% { transform: rotateY(0deg); } 50% { transform: rotateY(60deg); } }
+    @keyframes bootMoveAround { to { transform: rotate(360deg); } }
+
+    /* ===== custom（用戶自己的圖 / GIF / 影片） ===== */
+    .boot-custom {
+      background: var(--boot-custom-bg, var(--boot-bg));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .boot-custom img,
+    .boot-custom video {
+      width: 100%;
+      height: 100%;
+      object-fit: var(--boot-custom-fit, cover);
+      opacity: 0;
+      animation: bootFadeIn .25s ease forwards;
+    }
+
+    @keyframes bootFadeIn { to { opacity: 1; } }
+    @keyframes bootOvOut { to { opacity: 0; } }
+    @keyframes bootEndIn { to { opacity: 1; } }
+    @keyframes bootEndWord { from { opacity: 0; letter-spacing: .8em; text-indent: .8em; transform: translateY(4px); } to { opacity: 1; letter-spacing: .42em; text-indent: .42em; transform: none; } }
+    @keyframes bootEndLine { to { width: 34px; } }
+    @keyframes bootSun { 50% { transform: scale(1.15); } }
+    @keyframes bootDrift { to { transform: translateX(calc(100vw + 160px)); } }
+    @keyframes bootClockIn { to { opacity: 1; transform: none; } }
+    @keyframes bootNtfIn { to { transform: none; opacity: 1; } }
+    @keyframes bootHintUp { 50% { transform: translateY(-5px) rotate(45deg); } }
+    @keyframes bootUnlock { to { transform: translateY(-104%); } }
+    @keyframes bootIris { to { clip-path: circle(120% at 50% 60%); } }
+    @keyframes bootIrisOut { from { clip-path: circle(120% at 50% 60%); } to { clip-path: circle(0 at 50% 60%); } }
+    @keyframes bootTwinkle { 50% { opacity: .2; } }
+    @keyframes bootShoot { 0% { opacity: 0; transform: translate(0, 0) rotate(30deg); } 4% { opacity: 1; } 14% { opacity: 0; transform: translate(-90px, 52px) rotate(30deg); } 100% { opacity: 0; } }
+    @keyframes bootMoonSet { to { transform: translate(-30px, 120px); opacity: 0; } }
+    @keyframes bootPara { to { transform: translateX(-36vw); } }
+    @keyframes bootFirefly { 0% { opacity: 0; transform: translate(0, 0); } 20% { opacity: 1; } 50% { transform: translate(12px, -18px); } 80% { opacity: .8; } 100% { opacity: 0; transform: translate(-8px, -36px); } }
+    @keyframes bootHop { 0%, 100% { margin-top: 0; } 50% { margin-top: -14px; } }
+    @keyframes bootBob { 50% { transform: translateY(-3px); } }
+    @keyframes bootBubIn { to { opacity: 1; transform: none; } }
+    @keyframes bootTitleIn { from { opacity: 0; letter-spacing: .7em; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    @keyframes bootCursor { 50% { opacity: .6; } }
+
+    /* 系統開了「減少動態效果」：只留靜態畫面與淡入 */
+    @media (prefers-reduced-motion: reduce) {
+      .boot-lock .lk-sun, .boot-lock .lk-cloud, .boot-lock .lk-hint::before,
+      .boot-pixel .px-star, .boot-pixel .px-shoot, .boot-pixel .px-m, .boot-pixel .px-ff, .boot-pixel .px-pet, .boot-pixel .px-opt span:first-child {
+        animation: none !important;
+      }
+      .boot-pixel { clip-path: none; animation: bootFadeIn .3s ease forwards; }
+      #app-loading-overlay.fade-out .boot-lock, #app-loading-overlay.fade-out .boot-pixel { animation: none; opacity: 0; transition: opacity .25s ease; }
+    }
+
+  </style>
+  <script type="module">
+    // GitHub Pages reference boot: clear any old root-scope SW/cache before loading Vite chunks.
+    (async function(){
+      try {
+        let controlled = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+        if ('serviceWorker' in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map(r => r.unregister().catch(() => false)));
+        }
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map(k => caches.delete(k)));
+        }
+        if (controlled && sessionStorage.getItem('nuojiji_ref_sw_reloaded') !== '1') {
+          sessionStorage.setItem('nuojiji_ref_sw_reloaded','1');
+          location.reload();
+          return;
+        }
+        sessionStorage.removeItem('nuojiji_ref_sw_reloaded');
+      } catch (_) {}
+      await import('/doQvQ_doorkicker_6.9.89/assets/main-BDB-lJFa.js?v=9606408');
+    })();
+  </script>
+  <link rel="stylesheet" crossorigin href="/doQvQ_doorkicker_6.9.89/assets/app-core-l4Tnf7Uu.css">
+  <link rel="stylesheet" crossorigin href="/doQvQ_doorkicker_6.9.89/assets/messagingCssScope-BHg59bCh.css">
+  <link rel="stylesheet" crossorigin href="/doQvQ_doorkicker_6.9.89/assets/main-DPBOWPC8.css">
+  <link rel="stylesheet" crossorigin href="/doQvQ_doorkicker_6.9.89/assets/NotificationBar-CtpJvd3k.css">
+  <link rel="stylesheet" crossorigin href="/doQvQ_doorkicker_6.9.89/assets/vendor-fonts-H_UEFLAr.css">
+
+
+  <script>
+    // Static archaeology mirror: freeze vendor update/cache machinery.
+    window.__NUOJIJI_REFERENCE_MIRROR__ = true;
+    try { localStorage.removeItem('nuojiji_ota_pending'); } catch (_) {}
+    try {
+      if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then(function(regs){ regs.forEach(function(r){ try { r.unregister(); } catch (_) {} }); }).catch(function(){});
+      if ('caches' in window) caches.keys().then(function(keys){ return Promise.all(keys.map(function(k){ return caches.delete(k); })); }).catch(function(){});
+    } catch (_) {}
+  </script>
+<script>
+    (function(){
+      var started=Date.now();
+      function reveal(){
+        try {
+          var root=document.getElementById('root');
+          var os=document.getElementById('nuo-os-root');
+          if ((root && root.children.length) || (os && os.children.length)) {
+            window.__nuojijiAppReady=true;
+            if (typeof window.__nuojijiForceRemoveLoadingOverlay==='function') window.__nuojijiForceRemoveLoadingOverlay('app-ready');
+            else { var ov=document.getElementById('app-loading-overlay'); if (ov) ov.remove(); document.body.classList.remove('app-loading'); }
+            return;
+          }
+        } catch (_) {}
+        if (Date.now()-started < 20000) window.setTimeout(reveal,100);
+      }
+      window.setTimeout(reveal,300);
+    })();
+  </script>
+
+<!-- Reference mirror bootstrap: visual archaeology only; vendor auth/locks are bypassed. -->
+  <script>
+    try {
+      localStorage.setItem('lockScreenEnabled','false');
+      localStorage.setItem('lockPasswordEnabled','false');
+      localStorage.setItem('nuojiji_tavern_unlocked','true');
+      localStorage.setItem('nuo_age_confirmed_18_v1','1');
+      localStorage.setItem('nuojiji-announcement-version','v6.9-shop-wallet-delivery-appstore-v1');
+      localStorage.setItem('nuojiji_themePage_start_v1','0');
+      ['nuojiji_ota_pending','nuojiji_post_restore_loading','nuojiji_boot_attempts','nuojiji_boot_errors','nuojiji-last-resort-used','nuojiji_recent_crash'].forEach(function(k){ localStorage.removeItem(k); });
+      sessionStorage.setItem('unlocked','true');
+    } catch (_) {}
+  </script>
+</head>
+
+<body class="app-loading">
+  <div id="app-loading-overlay">
+    <p id="restore-loading-text"
+       style="display:none;position:absolute;bottom:18%;left:0;right:0;text-align:center;color:#888;font-size:15px;padding:0 24px;line-height:1.6">
+      正在載入還原的資料，請稍候…<br>資料較大時需要一點時間，請勿關閉
+    </p>
+    <!-- 🔬 卡住自診斷：15 秒還沒進 app 就把「卡在哪一步/什麼錯誤」直接打在螢幕上，
+         讓沒有 Mac 的用戶不必進 app 也能截圖回報。正常啟動早已進 app、本元素永不顯示。 -->
+    <pre id="stuck-diag-text"
+       style="display:none;position:absolute;bottom:6%;left:0;right:0;margin:0;text-align:left;color:#c00;font-size:11px;padding:0 20px;line-height:1.5;white-space:pre-wrap;word-break:break-all;font-family:monospace"></pre>
+    <!-- 🆘 最終兜底：靜默修復已達上限仍沒進 app 時露出，讓用戶自己按一下重試，
+         而不是無聲卡在永久開屏動畫（2026-08-21 事故：清完 SW 抓不到新 chunk，兩次自救用盡後死轉）。 -->
+    <button id="last-resort-retry"
+       style="display:none;position:absolute;bottom:16%;left:50%;transform:translateX(-50%);padding:10px 22px;font-size:15px;border:none;border-radius:999px;background:#111;color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.18)">
+      重新載入
+    </button>
+    <!-- 收場字標幕（壓在兩款動畫底下，收場時被揭出） -->
+    <div class="boot-stage boot-end" id="boot-end" hidden><b>NUOJIJI</b><u></u><i id="boot-end-sub">WELCOME BACK</i></div>
+    <!-- butterfly（原版） -->
+    <div class="boot-stage boot-butterfly" id="boot-butterfly" hidden>
+      <div class="loader">
+        <svg viewBox="0 0 18.528 35.424"><path d="M3.358 35.05c.435-.175.646-.408.861-.95.374-.94.698-1.52 1.145-2.05.78-.92 1.757-1.638 2.666-1.957.603-.212.9-.204 1.505.041.843.343 1.597.25 2.062-.254.95-1.029 3.95-6.873 5.841-11.376.869-2.07.831-1.882.797-3.962-.034-2.106-.024-2.064-.927-3.887-1.639-3.31-4.426-6.582-7.147-8.392C8.71 1.298 6.715.504 5.296.328c-.718-.09-2.465-.001-3.183.16C.943.752.279 1.268.279 1.917c0 .119.437 1.136.97 2.26.533 1.126 1.044 2.291 1.135 2.591.334 1.106.776 3.567.945 5.27.065.652.357 1.286.751 1.633.419.367 1.351.786 1.964.883.286.044.534.096.553.115.018.018-.129.128-.327.244-.761.446-1.432 1.439-1.74 2.574-.216.802-.194 2.914.045 4.121.24 1.212.575 2.318 1.031 3.403.46 1.092.535 1.458.439 2.135-.223 1.575-1.958 4.03-3.489 4.937-.693.41-.885.587-1.066.98-.173.375-.185.535-.069.953.223.802 1.206 1.326 1.937 1.033z"/></svg>
+        <svg viewBox="0 0 2.4 14.4"><path d="M2.2 13c0 .641-.447 1.16-1 1.16-.553 0-1-.519-1-1.16V1.4C.2.759.647.24 1.2.24c.553 0 1 .519 1 1.16z"/></svg>
+        <svg viewBox="0 0 18.528 35.424"><path d="M15.105 35.155c-.42-.196-.627-.482-.902-1.253-.544-1.517-2.145-3.126-3.636-3.652-.69-.243-.887-.242-1.486.01-.617.26-1.342.278-1.798.045-.555-.283-1.76-2.262-3.476-5.708C2.628 22.232.984 18.575.455 17.144c-.236-.637-.237-.655-.237-2.485 0-2.164.01-2.209.9-4.013 1.011-2.049 2.53-4.189 4.185-5.9C7.679 2.293 9.783.995 12.49.313c.782-.197 1.554-.236 2.695-.137 1.619.14 2.38.38 2.882.909.21.22.246.321.243.684-.002.373-.122.67-.959 2.395-1.277 2.63-1.59 3.806-2.035 7.63-.111.951-.316 1.426-.809 1.87-.52.47-1.306.807-2.165.928l-.391.054.35.224c.897.574 1.58 1.674 1.834 2.956.193.969.12 2.791-.164 4.15-.222 1.061-.696 2.518-1.12 3.443-.336.735-.411 1.584-.203 2.3.505 1.738 2.056 3.692 3.736 4.705.693.417.938.83.874 1.476-.104 1.071-1.193 1.706-2.153 1.256z"/></svg>
+      </div>
+    </div>
+    <!-- custom（用戶自訂圖 / GIF / 影片，index.html 啟動時從 IndexedDB nuojiji_boot 讀） -->
+    <div class="boot-stage boot-custom" id="boot-custom" hidden></div>
+    <!-- lockscreen -->
+    <div class="boot-stage boot-lock" id="boot-lock" hidden>
+      <div class="lk-sky"></div><div class="lk-sun"></div>
+      <div class="lk-cloud c1"></div><div class="lk-cloud c2"></div><div class="lk-cloud c3"></div>
+      <div class="lk-clock"><i id="boot-lk-date"></i><b id="boot-lk-time">9:41</b></div>
+      <div class="lk-stack">
+        <div class="lk-ntf">
+          <div class="lk-av" id="boot-lk-av"><svg viewBox="0 0 24 24"><circle cx="8.5" cy="10.5" r="1.6" fill="#7a4a5c"/><circle cx="15.5" cy="10.5" r="1.6" fill="#7a4a5c"/><path d="M8.6 15.2q3.4 3 6.8 0" fill="none" stroke="#7a4a5c" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+          <div class="lk-tx">
+            <b><span id="boot-lk-name" data-zh="他" data-zh_cn="他" data-en="Them">他</span><s>NUOJIJI</s><span id="boot-lk-now" data-zh="現在" data-zh_cn="现在" data-en="now">现在</span></b>
+            <em id="boot-lk-msg" data-zh="早安，起床了嗎？今天也想你了。" data-zh_cn="早安，起床了吗？今天也想你了。" data-en="Morning. You up? Missed you today.">早安，起床了吗？今天也想你了。</em>
+          </div>
+        </div>
+        <div class="lk-ntf n2">
+          <div class="lk-av moments"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-9.6C5 7.7 7 6 9.2 6c1.4 0 2.3.7 2.8 1.5C12.5 6.7 13.4 6 14.8 6 17 6 19 7.7 19 10.4 19 15.6 12 20 12 20z" fill="#c25a3a"/></svg></div>
+          <div class="lk-tx">
+            <b><span data-zh="朋友圈" data-zh_cn="朋友圈" data-en="Moments">朋友圈</span><span data-zh="3 分鐘前" data-zh_cn="3 分钟前" data-en="3m ago">3 分钟前</span></b>
+            <em data-zh="他讚了你的動態" data-zh_cn="他赞了你的动态" data-en="They liked your post">他赞了你的动态</em>
+          </div>
+        </div>
+        <div class="lk-ntf n3">
+          <div class="lk-av cal"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3" fill="#fff"/><rect x="4" y="5" width="16" height="5" rx="3" fill="#6a5acd"/><rect x="7" y="12" width="3" height="3" rx=".8" fill="#6a5acd"/><rect x="12" y="12" width="3" height="3" rx=".8" fill="#b3a8f5"/><rect x="7" y="16" width="3" height="2" rx=".8" fill="#b3a8f5"/></svg></div>
+          <div class="lk-tx">
+            <b><span data-zh="日曆" data-zh_cn="日历" data-en="Calendar">日历</span><span data-zh="今天" data-zh_cn="今天" data-en="Today">今天</span></b>
+            <em data-zh="19:00 和他一起看電影" data-zh_cn="19:00 和他一起看电影" data-en="19:00 Movie night together">19:00 和他一起看电影</em>
+          </div>
+        </div>
+      </div>
+      <div class="lk-hint" data-zh="向上滑動解鎖" data-zh_cn="向上滑动解锁" data-en="Swipe up to unlock">向上滑动解锁</div>
+      <div class="lk-dock"><i><svg viewBox="0 0 24 24"><path d="M9 3h6v4l-2 3v11H11V10L9 7z"/></svg></i><i><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.2"/></svg></i></div>
+      <div class="lk-bar"></div>
+    </div>
+    <!-- pixel -->
+    <div class="boot-stage boot-pixel" id="boot-pixel" hidden>
+      <div class="px-sky"></div><div class="px-sky2"></div>
+      <div class="px-moon"></div><div class="px-shoot"></div>
+      <div class="px-title"><b>NUOJIJI</b><i data-zh="a day with you begins" data-zh_cn="a day with you begins" data-en="a day with you begins">a day with you begins</i><u></u></div>
+      <div class="px-scene">
+        <div class="px-m far"><i style="left:0"></i><i style="left:22%"></i><i style="left:44%"></i><i style="left:66%"></i><i style="left:88%"></i></div>
+        <div class="px-m near"><i style="left:8%"></i><i style="left:36%"></i><i style="left:64%"></i><i style="left:92%"></i></div>
+        <div class="px-grass"></div><div class="px-ground"></div>
+        <div class="px-pet"><i></i></div>
+        <div class="px-bub">♥ …</div>
+      </div>
+      <div class="px-box">
+        <div class="px-nm" data-zh="糯嘰機" data-zh_cn="糯叽机" data-en="NUOJIJI">糯叽机</div>
+        <div id="boot-px-txt" data-zh="今天也要和他聊聊天嗎？" data-zh_cn="今天也要和他聊聊天吗？" data-en="Talk to them again today?"></div>
+        <div class="px-opt"><span data-zh="進入" data-zh_cn="进入" data-en="Enter">进入</span><span data-zh="稍後" data-zh_cn="稍后" data-en="Later">稍后</span></div>
+      </div>
+    </div>
+  </div>
+  <script>
+    (function () {
+      // 還原重啟後：顯示「正在載入還原資料」文字，讓用戶知道慢是在載入而非卡死。
+      //   flag 由 iCloud/備份還原流程在 reload 前寫入；React 初始化完成後由 App.jsx 清除。
+      // 開屏動畫：設定頁可切（localStorage nuojiji_boot_style：lockscreen | pixel），
+      //   文案跟隨用戶已選的 UI 語言（zh_cn / zh / en）。動畫全程不阻塞 app-ready。
+      // iOS（套殼 / 主屏 PWA）首幀：視口高度與 env() 都還沒就緒，先用 screen.height 與機型推算鎖死，
+      //   讓開屏第一幀就落在正確位置，不會下一幀「長高」時整個畫面跳一下（蘋果老問題）。
+      try {
+        var _ua = navigator.userAgent || '';
+        var _isIosDevice = /iPhone|iPad|iPod/.test(_ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        var _isCapIos = !!(window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === 'ios');
+        var _isIosPwa = _isIosDevice && (navigator.standalone === true);
+        if (_isCapIos || _isIosPwa) {
+          var _sw = Math.min(screen.width, screen.height), _sh = Math.max(screen.width, screen.height);
+          var _notch = (_sh / _sw) >= 1.9;                 // iPhone X 之後的全面屏
+          var _isPad = /iPad/.test(_ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+          var _top = _isPad ? 24 : (_notch ? ((_sh >= 852 && _sw >= 393) ? 59 : 47) : 20);
+          var _bot = _isPad ? 20 : (_notch ? 34 : 0);
+          // ⚠️ 介面縮放（meta viewport width 反算）下 1 CSS px ≠ 1 pt：screen.height 是 pt，
+          //   要除以生效的縮放比 __nuoVpScale 才是布局視口的 CSS 高度，否則縮小檔位會短一截露白底。
+          var _vs = (window.__nuoVpScale > 0) ? window.__nuoVpScale : 1;
+          var _de = document.documentElement;
+          var _cssH = Math.round(_sh / _vs);
+          // 若當下量到的布局高度已經更高（例如已就緒的視口），取大者，絕不比視口短
+          var _liveH = Math.max((_de && _de.clientHeight) || 0, window.innerHeight || 0);
+          if (_liveH > _cssH) _cssH = _liveH;
+          var _rs = _de.style;
+          _rs.setProperty('--boot-h', _cssH + 'px');
+          _rs.setProperty('--boot-safe-t', Math.round(_top / _vs) + 'px');
+          _rs.setProperty('--boot-safe-b', Math.round(_bot / _vs) + 'px');
+        }
+      } catch (e) { /* ignore */ }
+      try {
+        var _lang = localStorage.getItem('language') || 'zh_cn';
+        var _style = localStorage.getItem('nuojiji_boot_style') || 'pixel';
+        var _ov = document.getElementById('app-loading-overlay');
+        var _stageIds = { pixel: 'boot-pixel', lockscreen: 'boot-lock', butterfly: 'boot-butterfly', custom: 'boot-custom' };
+        var _stage = document.getElementById(_stageIds[_style] || 'boot-pixel');
+        var _hasEnd = (_style === 'pixel' || _style === 'lockscreen');
+        var _endEl = _hasEnd ? document.getElementById('boot-end') : null;
+        if (_style === 'custom') {
+          // 自訂：底色 / 貼合方式先從 localStorage 拿（同步），媒體本體從 IndexedDB 撈（非同步、幾十 ms）
+          try {
+            var _cfg = JSON.parse(localStorage.getItem('nuojiji_boot_custom') || '{}');
+            if (_cfg.bg) _stage.style.setProperty('--boot-custom-bg', _cfg.bg);
+            if (_cfg.fit) _stage.style.setProperty('--boot-custom-fit', _cfg.fit);
+            if (_ov && _cfg.bg) _ov.style.backgroundColor = _cfg.bg;
+          } catch (e) { /* ignore */ }
+          // 媒體兩份：① 沙盒文件的本機 URL（cfg.src，同步就有，原生端清空 IndexedDB 也還在）
+          //           ② IndexedDB 的字節（web / 舊資料）。①載不出來自動退②。
+          var _mount = function (src, type, onFail) {
+            // 注意：此時 _stage 還是 hidden（下面幾行才顯示），不可拿 hidden 當守衛
+            if (!src || !_stage) return;
+            var _el;
+            if (/^video\//.test(type || '')) {
+              _el = document.createElement('video');
+              _el.src = src; _el.muted = true; _el.autoplay = true; _el.loop = true; _el.playsInline = true;
+              _el.setAttribute('playsinline', ''); _el.setAttribute('muted', '');
+            } else {
+              _el = document.createElement('img');
+              _el.src = src; _el.alt = '';
+            }
+            if (onFail) _el.onerror = function () { try { _el.remove(); } catch (e) { /* ignore */ } onFail(); };
+            _stage.appendChild(_el);
+          };
+          var _fromIdb = function () {
+            try {
+              var _req = indexedDB.open('nuojiji_boot', 1);
+              _req.onupgradeneeded = function () { try { _req.result.createObjectStore('media'); } catch (e) { /* ignore */ } };
+              _req.onsuccess = function () {
+                try {
+                  var _db = _req.result;
+                  var _get = _db.transaction('media', 'readonly').objectStore('media').get('custom');
+                  _get.onsuccess = function () {
+                    var _rec = _get.result;
+                    if (!_rec) return;
+                    // bytes = 現行形態（ArrayBuffer）；blob = 舊形態（WKWebView 下可能已壞）
+                    var _blob = _rec.bytes ? new Blob([_rec.bytes], { type: _rec.type || '' })
+                      : (_rec.blob && _rec.blob.size > 0 ? _rec.blob : null);
+                    if (!_blob) return;
+                    _mount(URL.createObjectURL(_blob), _rec.type || _blob.type, null);
+                  };
+                } catch (e) { /* ignore */ }
+              };
+            } catch (e) { /* ignore */ }
+          };
+          try {
+            var _cfgSrc = '';
+            var _cfgType = '';
+            try {
+              var _c2 = JSON.parse(localStorage.getItem('nuojiji_boot_custom') || '{}');
+              _cfgSrc = _c2.src || ''; _cfgType = _c2.type || '';
+            } catch (e) { /* ignore */ }
+            if (_cfgSrc) _mount(_cfgSrc, _cfgType, _fromIdb);
+            else _fromIdb();
+          } catch (e) { /* ignore */ }
+        }
+        if (_endEl) {
+          _endEl.hidden = false;
+          if (_style === 'pixel') {
+            _endEl.classList.add('dark');
+            var _endSub = document.getElementById('boot-end-sub');
+            if (_endSub) _endSub.textContent = '▶ START';
+          }
+        }
+        if (_stage) {
+          _stage.hidden = false;
+          if (_ov) _ov.classList.add(_style === 'pixel' ? 'boot-pixel-mode' : 'boot-lock-mode');
+          // 底色第一幀就換成該款的主色，白屏在 HTML 一畫上就結束，不用等光圈 / 淡入
+          if (_ov && _style === 'pixel') _ov.style.backgroundColor = '#1b1638';
+          if (_ov && _style === 'lockscreen') _ov.style.backgroundColor = '#f6dde5';
+          var _els = _stage.querySelectorAll('[data-zh_cn]');
+          for (var _i = 0; _i < _els.length; _i++) {
+            var _v = _els[_i].getAttribute('data-' + _lang);
+            if (_v) _els[_i].textContent = _v;
+          }
+        }
+        if (_style === 'pixel') {
+          // 星星 + 螢火蟲 + 快速打字
+          var _scene = _stage.querySelector('.px-scene');
+          for (var _k = 0; _k < 28; _k++) {
+            var _st = document.createElement('i');
+            _st.className = 'px-star';
+            _st.style.left = (Math.random() * 100) + '%';
+            _st.style.top = (4 + Math.random() * 40) + '%';
+            _st.style.animationDelay = (Math.random() * 2) + 's';
+            _stage.appendChild(_st);
+          }
+          for (var _f = 0; _f < 7; _f++) {
+            var _ff = document.createElement('i');
+            _ff.className = 'px-ff';
+            _ff.style.left = (8 + Math.random() * 84) + '%';
+            _ff.style.top = (10 + Math.random() * 60) + 'px';
+            _ff.style.animationDelay = (.3 + Math.random() * 4) + 's';
+            if (_scene) _scene.appendChild(_ff);
+          }
+          var _txtEl = document.getElementById('boot-px-txt');
+          var _full = _txtEl ? _txtEl.textContent : '';
+          if (_txtEl) _txtEl.textContent = '';
+          var _n = 0;
+          window.setTimeout(function _type() {
+            if (!_txtEl || _n > _full.length) return;
+            _txtEl.textContent = _full.slice(0, _n++);
+            window.setTimeout(_type, 14);
+          }, 460);
+        } else {
+          var _d = new Date();
+          var _t = document.getElementById('boot-lk-time');
+          var _dt = document.getElementById('boot-lk-date');
+          if (_t) _t.textContent = _d.getHours() + ':' + ('0' + _d.getMinutes()).slice(-2);
+          if (_dt) {
+            var _wd = _lang === 'en'
+              ? ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][_d.getDay()]
+              : ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][_d.getDay()];
+            _dt.textContent = _lang === 'en'
+              ? (_wd + ', ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][_d.getMonth()] + ' ' + _d.getDate())
+              : ((_d.getMonth() + 1) + '月' + _d.getDate() + '日 ' + _wd);
+          }
+          // 推播文案：App 若有留下「最近一位角色的最後一句」（{name,text,avatar}）就用真的
+          try {
+            var _teaser = JSON.parse(localStorage.getItem('nuojiji_boot_teaser') || 'null');
+            if (_teaser && _teaser.text) {
+              var _m = document.getElementById('boot-lk-msg');
+              var _nm = document.getElementById('boot-lk-name');
+              var _av = document.getElementById('boot-lk-av');
+              if (_m) _m.textContent = _teaser.text;
+              if (_nm && _teaser.name) _nm.textContent = _teaser.name;
+              if (_av && _teaser.avatar && /^(data:image|blob:|https?:)/.test(_teaser.avatar)) {
+                var _img = document.createElement('img');
+                _img.src = _teaser.avatar;
+                _img.alt = '';
+                _av.appendChild(_img);
+              }
+            }
+          } catch (e) { /* ignore */ }
+        }
+      } catch (e) { /* ignore */ }
+      try {
+        if (localStorage.getItem('nuojiji_post_restore_loading') === '1') {
+          var _rt = document.getElementById('restore-loading-text');
+          if (_rt) _rt.style.display = 'block';
+        }
+      } catch (e) { /* ignore */ }
+    })();
+    (function () {
+      // 設計目標：用戶永遠不應該看到白屏，也永遠不應該看到「載入失敗請點此重試」的提示。
+      // 策略：
+      //  1. 開屏 loading overlay 只在 React 真的渲染出內容後才移除（不再依時間硬拆）
+      //  2. 偵測到 React 長時間沒 mount 時，背景靜默地解除 SW 註冊 + 清快取 + 重新載入
+      //     ——對用戶來說只是「載入比較久」，沒有任何彈窗或按鈕
+      //  3. 限制靜默修復頻率，避免 reload 死循環
+
+      // 🧹 開機 localStorage 減肥：遊戲存檔曾把每位玩家的頭像 base64 整份寫進單一 key
+      //    （狼人殺一把就 5MB+），把整個 localStorage 頂到配額上限 → 之後全 app 的
+      //    setItem 一律 QuotaExceededError（設定存不住、開機階段寫不進診斷黑盒）。
+      //    新版存檔已不再寫頭像，這裡負責把【舊機器上已經存在的肥資料】就地瘦回去。
+      //    只剝 players[].avatar / tachieUrl，遊戲進度完全保留；進遊戲後頭像會從名冊補回。
+      (function pruneFatGameStates() {
+        try {
+          var KEYS = ['werewolf_v2_state', 'truth_or_dare_state'], _i, _k, _raw, _o, _j, _changed, _slim;
+          for (_i = 0; _i < localStorage.length; _i++) {
+            _k = localStorage.key(_i);
+            if (_k && _k.indexOf('mahjong_game_state_') === 0) KEYS.push(_k);
+          }
+          for (_i = 0; _i < KEYS.length; _i++) {
+            _k = KEYS[_i];
+            _raw = localStorage.getItem(_k);
+            if (!_raw || _raw.length < 200000) continue;   // 不到 ~400KB 不動它
+            _o = JSON.parse(_raw);
+            if (!_o || !_o.players || !_o.players.length) continue;
+            _changed = false;
+            for (_j = 0; _j < _o.players.length; _j++) {
+              if (_o.players[_j] && (_o.players[_j].avatar || _o.players[_j].tachieUrl)) {
+                _o.players[_j].avatar = null;
+                _o.players[_j].tachieUrl = null;
+                _changed = true;
+              }
+            }
+            if (!_changed) continue;
+            _slim = JSON.stringify(_o);
+            if (_slim.length < _raw.length) localStorage.setItem(_k, _slim);
+          }
+        } catch (_ePrune) { /* 純減肥，失敗不影響開機 */ }
+      })();
+
+      var WATCHDOG_STAGE1_MS = 12000;        // 第一階段：主腳本應該已啟動
+      var WATCHDOG_STAGE2_MS = 60000;        // 第二階段：給初始化更寬裕時間，避免慢網誤判
+      // 🔧 2026-04-15：從 35s 延長到 60s。原因：PWA 背景喚醒後 Supabase getSession()
+      //    (內部用 navigator.locks) 可能卡 8s+ 才 fallback，加上 Discord OAuth 伺服器驗證、
+      //    慢網載入 chunk，整體 auth 鏈路可能超過 35s 才 render。誤觸 silentRecover 會 reload
+      //    打斷心跳，導致設備被 KV session 踢掉 → 用戶端體感「閃退後登入沒了」。
+      var SILENT_RECOVER_KEY = 'nuojiji-silent-recover-attempts';
+      var SILENT_RECOVER_WINDOW_MS = 10 * 60 * 1000;  // 10 分鐘窗口
+      var SILENT_RECOVER_MAX_ATTEMPTS = 2;            // 同一窗口最多 2 次
+      var LAST_RESORT_KEY = 'nuojiji-last-resort-used'; // 手動兜底重試用過的標記（用於升級清快取）
+
+      // 🔧 auth 讓位上限：watchdog 因「auth 進行中」延後 silentRecover 是為了防止
+      //    reload 打斷心跳讓【已登入】用戶被 KV 踢掉。但若 auth 鏈路真的卡死
+      //    （Supabase 連不上 / navigator.locks orphan / PB 恢復卡住），__nuojijiAuthInFlight
+      //    可能長期殘留 true → watchdog 無限讓位 → 蝴蝶永遠轉、用戶被卡死。
+      //    對策：讓位次數有上限，超過後即使 auth flag 仍 true 也強制走 silentRecover。
+      //    安全性：silentRecover 開頭 hasReactRenderedContent() 為 true 就直接 return，
+      //    而心跳只在 registerDevice 成功 → setSession → React 渲染出內容【之後】才啟動，
+      //    所以能被強制 reload 自愈的一定是「還沒渲染成功的卡死用戶」，
+      //    心跳進行中的用戶 content 檢查必為 true → 永不會被打斷。零誤踢。
+      var AUTH_YIELD_MAX = 4;                          // 最多讓位 4 次（4 × 15s ≈ 60s）
+      var authYieldCount = 0;
+      // 🔧 2026-08-21：大表後台回灌（快照自癒/斷點續灌）進行中也讓位。
+      //    事故：watchdog 在頁面 hidden 時 silentRecover reload，把 messages 等
+      //    大表的後台回灌攔腰斬斷 → 聊天記錄殘缺（「再開消失」）。回灌有持久化
+      //    斷點兜底，但能不打斷就不打斷。讓位上限較寬（大庫回灌可要幾分鐘）。
+      var HEAVY_YIELD_MAX = 20;                        // 最多讓位 20 次（20 × 15s ≈ 5min）
+      var heavyYieldCount = 0;
+
+      var overlayRemoved = false;
+      var silentRecoverInFlight = false;
+
+      function hasReactRenderedContent() {
+        var appRoot = document.getElementById('nuo-os-root');
+        var root = document.getElementById('root');
+        return !!(appRoot && appRoot.children && appRoot.children.length > 0)
+          || !!(root && root.children && root.children.length > 0);
+      }
+
+      function hasMainScriptStarted() {
+        return window.__nuojijiMainScriptStarted === true;
+      }
+
+      function hasAppReadySignal() {
+        return window.__nuojijiAppReady === true;
+      }
+
+      // Auth 流程進行中（getSession / OAuth 驗證 / 首次 session 恢復）
+      // 若 true，watchdog 應該讓位等它完成，避免 reload 打斷心跳導致設備被 KV 踢掉
+      function isAuthInFlight() {
+        return window.__nuojijiAuthInFlight === true;
+      }
+
+      function isOverlayVisible() {
+        var loadingOverlay = document.getElementById('app-loading-overlay');
+        return !!loadingOverlay && !loadingOverlay.classList.contains('fade-out');
+      }
+
+      // 首屏 lazy chunk 還在路上時，React 只渲染出 Suspense 的轉圈佔位（data-boot-fallback）。
+      // 那不算「真畫面」——開屏動畫拆掉就會露出一個白底轉圈。
+      function hasBootFallbackOnScreen() {
+        return !!document.querySelector('[data-boot-fallback]');
+      }
+
+      var appReadyWaitStart = 0;
+      var appReadySettled = false;
+      function forceRemoveLoadingOverlay(reason) {
+        if (overlayRemoved) return;
+        // 🔧 關鍵保護：React 還沒渲染任何內容就絕對不拆 overlay。
+        // 寧可讓蝴蝶多轉一會兒，也不要露出白底。
+        // 唯一例外：reason === 'app-ready'（由 App.jsx initApp 完成後主動呼叫，
+        // 此時 React 必然已經 mount，content 檢查也會通過）
+        if (!hasReactRenderedContent() && reason !== 'app-ready') {
+          return;
+        }
+        // app-ready 但首屏還是轉圈佔位、或主頁自訂圖標還沒解析完（會先畫預設圖再換圖）
+        //   → 等真畫面與圖標都就緒、再多等兩幀讓 <img> 畫上去，才拆（最多等 6s，避免卡死）
+        if (reason === 'app-ready') {
+          var notReady = !hasReactRenderedContent() || hasBootFallbackOnScreen() || window.__nuojijiIconsReady !== true;
+          if (!appReadyWaitStart) appReadyWaitStart = Date.now();
+          if (notReady && Date.now() - appReadyWaitStart < 6000) {
+            window.setTimeout(function () { forceRemoveLoadingOverlay('app-ready'); }, 60);
+            return;
+          }
+          if (!appReadySettled) {
+            appReadySettled = true;
+            requestAnimationFrame(function () { requestAnimationFrame(function () { forceRemoveLoadingOverlay('app-ready'); }); });
+            return;
+          }
+        }
+        var loadingOverlay = document.getElementById('app-loading-overlay');
+        document.body.classList.remove('app-loading');
+
+        // 通知 React：開屏開始收場（主屏即將露出）→ 主題首頁等這個訊號才播入場動畫，不然會在開屏底下播完
+        var announceReveal = function () {
+          try { window.__nuojijiBootRevealed = true; window.dispatchEvent(new Event('nuojiji-boot-reveal')); } catch (_e) {}
+        };
+        if (!loadingOverlay) { overlayRemoved = true; announceReveal(); return; }
+        if (!loadingOverlay.classList.contains('fade-out')) {
+          loadingOverlay.classList.add('fade-out');
+        }
+        overlayRemoved = true;
+        announceReveal();
+
+        window.setTimeout(function () {
+          if (loadingOverlay && loadingOverlay.parentNode) {
+            loadingOverlay.remove();
+          }
+        }, 1300);   // 收場三拍 1.2s（見 CSS 註解）
+      }
+
+      // 讀取最近 10 分鐘內的靜默修復次數
+      function getRecentRecoverAttempts() {
+        try {
+          var raw = localStorage.getItem(SILENT_RECOVER_KEY);
+          if (!raw) return [];
+          var parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed)) return [];
+          var cutoff = Date.now() - SILENT_RECOVER_WINDOW_MS;
+          return parsed.filter(function (t) { return typeof t === 'number' && t > cutoff; });
+        } catch (_e) {
+          return [];
+        }
+      }
+
+      function recordRecoverAttempt() {
+        try {
+          var attempts = getRecentRecoverAttempts();
+          attempts.push(Date.now());
+          localStorage.setItem(SILENT_RECOVER_KEY, JSON.stringify(attempts));
+        } catch (_e) { }
+      }
+
+      // 🆘 最終兜底出口：只在「自動自救全部用完仍沒進 app」時才露出。
+      //    只做換 URL 重載（帶時間戳繞 HTTP cache），不清 SW / 不清快取 ——
+      //    離線兜底是這種情況下唯一還能把 app 拉起來的東西，絕不能自斷後路。
+      function showLastResortRetry() {
+        try {
+          if (hasReactRenderedContent() || hasAppReadySignal()) return;
+          var btn = document.getElementById('last-resort-retry');
+          if (!btn || btn.style.display === 'block') return;
+          btn.style.display = 'block';
+          // 上一輪已經手動重試過還是進不來 → 這次升級成「連 SW/快取一起清」。
+          //   第一次只換 URL 重載（保住離線兜底）；連兩次都失敗代表快取裡那份就是壞的，
+          //   再留著也只會一直餵同一份壞 index/chunk，這時清掉才是唯一出路。
+          var escalate = false;
+          try { escalate = localStorage.getItem(LAST_RESORT_KEY) === '1'; } catch (_e) { }
+          if (escalate) btn.textContent = '重新載入（徹底清除快取）';
+          btn.addEventListener('click', function () {
+            btn.disabled = true;
+            btn.textContent = '載入中…';
+            try { if (window.__nuojijiRecordReload) window.__nuojijiRecordReload('last-resort-manual-retry' + (escalate ? '-hard' : '')); } catch (_e) { }
+            try {
+              // 清掉自救計數，讓這次手動重試後 watchdog 能重新介入
+              localStorage.removeItem(SILENT_RECOVER_KEY);
+              localStorage.setItem(LAST_RESORT_KEY, '1');
+            } catch (_e) { }
+            var go = function () {
+              try {
+                var u = new URL(window.location.href);
+                u.searchParams.set('__retry', String(Date.now()));
+                window.location.replace(u.toString());
+              } catch (_e) {
+                window.location.reload();
+              }
+            };
+            if (!escalate) { go(); return; }
+            window.setTimeout(go, 8000);   // 安全網：清理卡住也一定會重載
+            Promise.all([
+              (function () {
+                if (!('serviceWorker' in navigator)) return Promise.resolve();
+                return navigator.serviceWorker.getRegistrations().then(function (regs) {
+                  return Promise.all(regs.map(function (r) { return r.unregister().catch(function () { }); }));
+                }).catch(function () { });
+              })(),
+              (function () {
+                if (!('caches' in window)) return Promise.resolve();
+                return caches.keys().then(function (names) {
+                  return Promise.all(names.map(function (n) { return caches.delete(n).catch(function () { }); }));
+                }).catch(function () { });
+              })(),
+              // 🩹 清 SW / Cache Storage 都碰不到瀏覽器的 HTTP 磁碟快取 —— 若壞掉的是
+              //   entry chunk 的半截副本，光清快取重載永遠還是同一份殘檔（2026-09-09 事故）。
+              //   這裡順手用 cache:'reload' 把頁面上的 module script 從網絡重抓一次、覆寫掉它。
+              (function () {
+                try {
+                  var srcs = [];
+                  var nodes = document.querySelectorAll('script[type=module][src]');
+                  for (var i = 0; i < nodes.length; i++) srcs.push(nodes[i].src);
+                  try { (window.__nuojijiCorruptAssets || []).forEach(function (f) { if (srcs.indexOf(f) < 0) srcs.push(f); }); } catch (_e) { }
+                  if (!srcs.length || typeof fetch !== 'function') return Promise.resolve();
+                  return Promise.all(srcs.map(function (u) {
+                    return fetch(u, { cache: 'reload', credentials: 'same-origin' }).catch(function () { });
+                  }));
+                } catch (_e) { return Promise.resolve(); }
+              })()
+            ]).finally(go);
+          }, { once: true });
+        } catch (_e) { }
+      }
+
+      // 靜默修復：背景解除 SW + 清快取 + 重載，全程不顯示任何 UI
+      function silentRecover(reason) {
+        if (silentRecoverInFlight) return;
+        if (hasReactRenderedContent()) return;
+        if (hasAppReadySignal()) return;
+        if (!isOverlayVisible()) return;
+        // 🔧 2026-04-15：auth 正在驗證中就不要 reload，否則會打斷心跳讓用戶被踢登入
+        // 🔧 2026-06-09：但讓位有上限。auth 鏈路卡死時 flag 會長期殘留 true，
+        //    無限讓位 → 用戶卡在蝴蝶界面。超過 AUTH_YIELD_MAX 次後強制 reload 自愈。
+        //    安全：能走到這裡說明 hasReactRenderedContent() 仍為 false（上面已 return），
+        //    即「還沒渲染成功」，心跳尚未啟動，reload 不會踢任何已登入用戶。
+        if (isAuthInFlight() && authYieldCount < AUTH_YIELD_MAX) {
+          authYieldCount++;
+          console.warn('[boot watchdog] auth 進行中，延後 silentRecover (' + authYieldCount + '/' + AUTH_YIELD_MAX + '):', reason);
+          window.setTimeout(function () { silentRecover(reason + '-retry-after-auth'); }, 15000);
+          return;
+        }
+        if (isAuthInFlight()) {
+          console.warn('[boot watchdog] auth 讓位已達上限，auth 疑似卡死，強制靜默修復:', reason);
+        }
+        // 🔧 大表後台回灌進行中：reload 會斬斷回灌讓聊天記錄殘缺，讓位等它完成。
+        if (window.__nuojijiHeavyRestorePending === true && heavyYieldCount < HEAVY_YIELD_MAX) {
+          heavyYieldCount++;
+          console.warn('[boot watchdog] 大表回灌進行中，延後 silentRecover (' + heavyYieldCount + '/' + HEAVY_YIELD_MAX + '):', reason);
+          window.setTimeout(function () { silentRecover(reason + '-retry-after-heavy'); }, 15000);
+          return;
+        }
+
+        var attempts = getRecentRecoverAttempts();
+        if (attempts.length >= SILENT_RECOVER_MAX_ATTEMPTS) {
+          // 已達上限：不再自動 reload（避免死循環），但【不能就這樣無聲卡死】。
+          // 2026-08-21 事故：清完 SW/快取後抓不到新 chunk，兩次自救用盡 → 蝴蝶永久轉、
+          // 沒有任何出口，用戶只能強退。改為露出最終兜底重試按鈕，把控制權交回用戶。
+          console.warn('[boot watchdog] 靜默修復已達上限，停止自動重試，露出手動重試出口');
+          showLastResortRetry();
+          return;
+        }
+
+        silentRecoverInFlight = true;
+        recordRecoverAttempt();
+        try { if (window.__nuojijiRecordReload) window.__nuojijiRecordReload('watchdog-silent-recover:' + reason); } catch (_e) { }
+        console.warn('[boot watchdog] 觸發靜默修復:', reason);
+
+        // 清掉 chunk reload 計數器，讓 main.jsx 的自動恢復鏈也能重新介入
+        try {
+          sessionStorage.removeItem('nuojiji-chunk-reload');
+          sessionStorage.removeItem('nuojiji-chunk-reload-count');
+        } catch (_e) { }
+
+        var done = false;
+        var doReload = function () {
+          if (done) return;
+          done = true;
+          try {
+            var u = new URL(window.location.href);
+            u.searchParams.set('__recover', String(Date.now()));
+            window.location.replace(u.toString());
+          } catch (_e) {
+            window.location.reload();
+          }
+        };
+        // 安全網：15 秒後無論預檢/清理結果如何都強制 reload（預檢兩段各 6 秒超時，要留夠）
+        window.setTimeout(doReload, 15000);
+
+        var unregisterSW = function () {
+          if (!('serviceWorker' in navigator)) return Promise.resolve();
+          return navigator.serviceWorker.getRegistrations().then(function (regs) {
+            return Promise.all(regs.map(function (r) {
+              return r.unregister().catch(function () { });
+            }));
+          }).catch(function () { });
+        };
+        var clearCaches = function () {
+          if (!('caches' in window)) return Promise.resolve();
+          return caches.keys().then(function (names) {
+            return Promise.all(names.map(function (n) {
+              return caches.delete(n).catch(function () { });
+            }));
+          }).catch(function () { });
+        };
+        // 🛰️ 根治點：清 SW / 快取【之前】先確認新代碼真的抓得到。
+        //   事故：抓不到（部署 hash 對不上 404 / 斷網 / 被劫持成 HTML）時仍清光離線兜底，
+        //   重載後連 entry module 都跑不起來（診斷顯示「主腳本: 無」）→ 永久蝴蝶。
+        //   抓不到就【只重載、不清任何東西】，讓 SW 用舊快取把 app 拉起來。
+        probeFreshEntryReachable().then(function (reachable) {
+          if (!reachable) {
+            console.error('[boot watchdog] 新代碼不可達，保留 SW/快取，僅重載');
+            doReload();
+            return;
+          }
+          Promise.all([unregisterSW(), clearCaches()]).finally(doReload);
+        });
+      }
+
+      // 探測「線上 index + 它引用的 entry module」是否真的拿得到（繞 SW / HTTP cache）。
+      // index.html 與 main.jsx 各有一份：main.jsx 那份給毒丸/手動修復用，這份給 watchdog 用
+      // （watchdog 觸發時主腳本可能根本沒起來，拿不到 main.jsx 的函式）。
+      function probeFreshEntryReachable() {
+        if (typeof fetch !== 'function') return Promise.resolve(false);
+        var bust = function (u) {
+          try {
+            var url = new URL(u, window.location.href);
+            url.searchParams.set('__probe', String(Date.now()));
+            return url.href;
+          } catch (_e) { return u; }
+        };
+        var withTimeout = function (p, ms) {
+          return Promise.race([p, new Promise(function (_res, rej) {
+            window.setTimeout(function () { rej(new Error('probe-timeout')); }, ms);
+          })]);
+        };
+        return withTimeout(fetch(bust(window.location.pathname || '/'), { cache: 'no-store', credentials: 'same-origin' }), 6000)
+          .then(function (res) {
+            if (!res.ok) throw new Error('index-' + res.status);
+            return withTimeout(res.text(), 6000);
+          })
+          .then(function (html) {
+            var m = html.match(/<script[^>]+type=["']module["'][^>]*src=["']([^"']+)["']/i)
+              || html.match(/<script[^>]+src=["']([^"']+)["'][^>]*type=["']module["']/i);
+            if (!m || !m[1]) throw new Error('no-entry');
+            return withTimeout(fetch(bust(m[1]), { cache: 'no-store', credentials: 'same-origin' }), 6000);
+          })
+          .then(function (res) {
+            if (!res.ok) throw new Error('entry-' + res.status);
+            // 被劫持成 HTML 錯誤頁時 status 也可能 200，必須看 content-type
+            var ct = String(res.headers.get('content-type') || '').toLowerCase();
+            if (ct.indexOf('html') >= 0) throw new Error('entry-html');
+            return true;
+          })
+          .catch(function () { return false; });
+      }
+
+      // 🩹 主腳本從未執行（診斷顯示「主腳本: 無」）的【非破壞性】第一手自救：
+      //   典型成因是 SW 送來的 index 指向已被清掉的舊 entry chunk，或該次 module
+      //   請求剛好失敗 —— 頁面本身是好的，只是 entry 沒跑起來。此時直接重載會白白
+      //   丟掉這次啟動（且 reload 次數有限、清快取更可能自斷離線兜底）。
+      //   先照【線上最新 index 指到的 entry】重新注入一次 module script：成功就直接進 app，
+      //   完全不用 reload、不動 SW / 快取。失敗才回到既有的 silentRecover 鏈。
+      //   安全性：只在 hasMainScriptStarted() 為 false 時注入，絕不會重複執行 main.jsx。
+      // 🐞 2026-08-27 真機診斷（vivo S30 / Chrome 網頁版「經常白屏進不去」）修正三點：
+      //   實錄診斷：『啟動階段(本次): 無 — 主腳本尚未寫入任何階段』、開機錯誤黑盒【一條都沒有】、
+      //   上次 reload = hard-reload-clearing-code-cache。
+      //   解讀：entry module 既沒 404 也沒拋錯，而是請求【懸住不返回】（慢網 / 連線被中斷）；
+      //   同時上一輪的 hard reload 已經把 SW + Cache Storage 清光，離線兜底沒了 →
+      //   每次進來都必須真的走網絡抓 index/entry，抓不到就白屏，抓到才「過一會兒才彈出主界面」。
+      //   ① 舊版 reinjectTried 是【全局一次性】：stage1 在第 12 秒用掉唯一那次，之後
+      //      showStuckDiag 再叫它只會立刻 false —— 對「偶發懸住、再抓一次就過」的網絡毫無用處。
+      //      改為允許有限次重試（REINJECT_MAX 次）。
+      //   ② fetch 完全沒有超時：懸住的請求 promise 永不 resolve，這一輪重試就此蒸發。
+      //      改為每次抓取都有硬超時，逾時即算失敗、讓出給下一輪。
+      //   ③ 失敗原因沒有任何記錄，診斷面板只能顯示「主腳本: 無」，無從分辨懸住 / 404 / 劫持。
+      //      現在把每輪結果記進 __nuojijiReinjectLog，一併打在診斷上。
+      var REINJECT_MAX = 3;
+      var reinjectTries = 0;
+      var reinjectInFlight = false;
+      window.__nuojijiReinjectLog = [];
+      function _noteReinject(r) {
+        try {
+          window.__nuojijiReinjectLog.push(r);
+          if (window.__nuojijiReinjectLog.length > REINJECT_MAX + 1) window.__nuojijiReinjectLog.shift();
+          // 診斷面板在 15s 就畫好，而重注入結果最快 22s 才出爐 → 用戶截圖回報時
+          // 「entry重注入」那行永遠是空的（正是這條線索最該被看到的時候）。有新結果就重畫。
+          var _dg = document.getElementById('stuck-diag-text');
+          if (_dg && _dg.style.display === 'block') showStuckDiag();
+        } catch (_e) { }
+      }
+      // 懸住的請求必須有出口，否則整輪重試靜靜蒸發（見上方 ②）
+      function withTimeout(p, ms, tag) {
+        return Promise.race([
+          p,
+          new Promise(function (_res, rej) {
+            setTimeout(function () { rej(new Error(tag + '-timeout')); }, ms);
+          }),
+        ]);
+      }
+
+      function tryReinjectEntry() {
+        if (hasMainScriptStarted()) return Promise.resolve(true);
+        if (reinjectInFlight) return Promise.resolve(false);
+        if (reinjectTries >= REINJECT_MAX) return Promise.resolve(false);
+        reinjectTries++;
+        reinjectInFlight = true;
+        if (typeof fetch !== 'function') { reinjectInFlight = false; return Promise.resolve(false); }
+        var bust = function (u) {
+          try {
+            var url = new URL(u, window.location.href);
+            url.searchParams.set('__reinject', String(Date.now()));
+            return url.href;
+          } catch (_e) { return u; }
+        };
+        var done = function (v, why) {
+          reinjectInFlight = false;
+          _noteReinject((v ? 'ok' : 'fail:' + why) + '@' + reinjectTries);
+          return v;
+        };
+        return withTimeout(
+          fetch(bust(window.location.pathname || '/'), { cache: 'no-store', credentials: 'same-origin' }),
+          10000, 'index-fetch'
+        )
+          .then(function (res) {
+            if (!res.ok) throw new Error('index-' + res.status);
+            return withTimeout(res.text(), 10000, 'index-text');
+          })
+          .then(function (html) {
+            var m = html.match(/<script[^>]+type=["']module["'][^>]*src=["']([^"']+)["']/i)
+              || html.match(/<script[^>]+src=["']([^"']+)["'][^>]*type=["']module["']/i);
+            if (!m || !m[1]) throw new Error('no-entry');
+            if (hasMainScriptStarted()) return done(true);   // 期間自己起來了
+            return healAsset(m[1]).then(function (heal) { return injectEntry(m[1], heal); });
+          })
+          .catch(function (e) { return done(false, String((e && e.message) || e).slice(0, 40)); });
+
+        function injectEntry(src, heal) {
+            return new Promise(function (resolve) {
+              var s = document.createElement('script');
+              s.type = 'module';
+              // ⚠️ 絕對不要對 entry 加 ?__reinject 之類的查詢參數：
+              //   ES module 以【完整 URL】為身分，帶參數的 entry 會被當成另一個模組重新求值，
+              //   而它動態載入的 lazy chunk（ChatDetailScreen 等）內部 import 回來的卻是
+              //   【不帶參數】的原始 entry —— 於是 entry 在同一頁裡存在兩份實例，
+              //   createContext() 產生兩個不同的 context 物件：Provider 掛在 A 份、
+              //   畫面 useContext 讀的是 B 份 → 一律拿到 undefined，
+              //   實測炸成「聊天界面載入錯誤：Cannot destructure property 'startCall'」。
+              //   entry 抓不到本來就不會被瀏覽器快取成失敗，直接用原網址重抓即可。
+              // 使用呼叫端已解析好的入口網址。`m` 只存在於上一個 then callback 裡，
+              // 在這裡讀 `m[1]` 會直接 ReferenceError，讓原本用來自救的重注入永遠失敗。
+              s.src = src;
+              s.onerror = function () { resolve(done(false, 'script-onerror')); };
+              document.body.appendChild(s);
+              // 給它 12 秒把 module graph 跑到設旗標那行（慢網下 8 秒常常不夠，
+              // 而這裡逾時的代價是白白丟掉一次重試額度）
+              var t0 = Date.now();
+              var iv = window.setInterval(function () {
+                if (hasMainScriptStarted()) { window.clearInterval(iv); resolve(done(true)); return; }
+                if (Date.now() - t0 > 12000) { window.clearInterval(iv); resolve(done(false, 'script-stall' + (heal ? '/' + heal : ''))); }
+              }, 200);
+            });
+        }
+      }
+
+      // 🩹 沖掉「被截斷的快取副本」：Cache Storage 刪一次 + fetch(cache:'reload') 強制走網絡重抓。
+      //   cache:'reload' 是唯一能在【不改網址】前提下越過並覆寫瀏覽器 HTTP 磁碟快取的手段，
+      //   正好對上本事故（entry 網址不能加查詢參數，否則同頁會有兩份 entry 實例、
+      //   createContext 分裂成兩個物件，實測炸成「Cannot destructure property 'startCall'」）。
+      //   抓回來後用 content-length 對一次位元組數，確認這回不是半截；不合就再抓一次。
+      //   全程失敗一律吞掉，回退到既有的注入 → silentRecover 鏈，零回歸。
+      function healAsset(src) {
+        var abs;
+        try { abs = new URL(src, window.location.href).href; } catch (_e) { return Promise.resolve(''); }
+        var corrupt = [];
+        try { corrupt = window.__nuojijiCorruptAssets || []; } catch (_e) { }
+        // 有明確截斷信標 → 一定沖；沒有信標時，只在第二輪之後才沖（第一輪多半只是請求懸住）
+        var suspected = corrupt.some(function (f) { return abs.indexOf(f) >= 0 || f.indexOf(abs) >= 0; });
+        if (!suspected && reinjectTries < 2) return Promise.resolve('');
+        var purge = ('caches' in window)
+          ? caches.keys().then(function (names) {
+            return Promise.all(names.map(function (n) {
+              return caches.open(n).then(function (c) {
+                return Promise.all([c.delete(abs), c.delete(abs, { ignoreSearch: true })]);
+              }).catch(function () { });
+            }));
+          }).catch(function () { })
+          : Promise.resolve();
+        var pull = function (attempt) {
+          return fetch(abs, { cache: 'reload', credentials: 'same-origin' }).then(function (res) {
+            if (!res.ok) throw new Error('heal-' + res.status);
+            var want = parseInt(res.headers.get('content-length') || '0', 10);
+            return res.blob().then(function (b) {
+              if (want && b.size !== want) throw new Error('heal-short-' + b.size + '/' + want);
+              return 'healed' + (attempt > 1 ? 'x' + attempt : '');
+            });
+          }).catch(function (e) {
+            if (attempt < 2) return pull(attempt + 1);
+            return 'healfail:' + String((e && e.message) || e).slice(0, 24);
+          });
+        };
+        return withTimeout(purge, 5000, 'purge').catch(function () { })
+          .then(function () { return withTimeout(pull(1), 20000, 'heal'); })
+          .catch(function (e) { return 'healfail:' + String((e && e.message) || e).slice(0, 24); })
+          .then(function (r) { _noteReinject(r); return r; });
+      }
+
+      // 🛟 SW 自我修復（打破「清光快取 → 抓不到腳本 → 跑不起來 → 裝不回快取」的死鎖）：
+      //   SW 註冊寫在 bundle 裡（pwaUpdateManager），bundle 起不來就永遠註冊不回來，
+      //   於是這台機器每次冷啟動都得裸奔網絡。主腳本長時間沒起來時，這裡直接把 SW 註冊回去，
+      //   讓離線兜底有機會重建；失敗一律吞掉（sw.js 不存在 / 不支援 / 非安全上下文都無害）。
+      // ⚠️ 原生套殼（APK / IPA）【絕不】註冊 SW：資源本來就在本機 bundle 裡，不存在「離線兜底」，
+      //   main.jsx 在原生端會主動 unregister 所有 SW —— 但主腳本起不來時那段根本不會跑。
+      //   舊版這裡不分平台就把 sw.js 註冊回去 → 原生端從此被 SW 接管（預快取的是 APK 內建版本的
+      //   chunk，與 OTA bundle 對不上；且 silentRecover 在「新代碼不可達」時刻意保留 SW）→
+      //   唯一會清 SW 的 main.jsx 永遠跑不起來，形成自鎖，每次冷啟都卡開屏。
+      //   原生端反過來：主腳本沒起來時順手把殘留的 SW 清掉，讓下次冷啟直連本機 bundle。
+      function isNativeShell() {
+        try {
+          if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) return true;
+        } catch (_e) { }
+        try {
+          var _h = window.location.hostname, _p = window.location.protocol;
+          if (_p === 'capacitor:') return true;
+          if (_h === 'localhost' && !window.location.port && _p === 'https:') return true;
+        } catch (_e) { }
+        return false;
+      }
+      function tryRestoreServiceWorker() {
+        try {
+          if (!('serviceWorker' in navigator)) return;
+          if (window.__nuojijiSwRestoreTried) return;
+          window.__nuojijiSwRestoreTried = true;
+          if (isNativeShell()) {
+            navigator.serviceWorker.getRegistrations().then(function (regs) {
+              (regs || []).forEach(function (r) { r.unregister().catch(function () { }); });
+            }).catch(function () { });
+            return;
+          }
+          navigator.serviceWorker.getRegistrations().then(function (regs) {
+            if (regs && regs.length) return;   // 還在，不動它
+            Promise.resolve(null); // reference mirror: SW registration disabled
+          }).catch(function () { });
+        } catch (_e) { }
+      }
+
+      // 暴露給 App.jsx：React 完成 init 時主動呼叫，此時可以安全地拆 overlay
+      window.__nuojijiForceRemoveLoadingOverlay = forceRemoveLoadingOverlay;
+
+      // 啟動成功標記：React 完成首次渲染後清掉舊的修復計數器，避免污染未來的會話
+      // （由 main.jsx 的 resetReloadCounter 在 idle 時呼叫）
+      window.__nuojijiClearRecoverAttempts = function () {
+        try { localStorage.removeItem(SILENT_RECOVER_KEY); } catch (_e) { }
+      };
+
+      // Stage 1：若主腳本都還沒啟動，通常是更新窗口 chunk/module 問題，快速進行靜默修復。
+      window.setTimeout(function () {
+        if (hasReactRenderedContent() || hasAppReadySignal()) return;
+        if (hasMainScriptStarted()) return;
+
+        // 頁面在背景時瀏覽器可能節流，延後判斷一次。
+        if (document.visibilityState === 'hidden') {
+          window.setTimeout(function () {
+            if (!hasReactRenderedContent() && !hasMainScriptStarted()) {
+              tryReinjectEntry().then(function (ok) {
+                if (ok) { console.warn('[boot watchdog] entry 重新注入成功，免 reload'); return; }
+                silentRecover('watchdog-stage1-main-script-not-started-hidden');
+              });
+            }
+          }, 5000);
+          return;
+        }
+
+        tryReinjectEntry().then(function (ok) {
+          if (ok) { console.warn('[boot watchdog] entry 重新注入成功，免 reload'); return; }
+          silentRecover('watchdog-stage1-main-script-not-started');
+        });
+      }, WATCHDOG_STAGE1_MS);
+
+      // Stage 2：主腳本有啟動但仍長時間沒內容，才視為初始化失敗。
+      window.setTimeout(function () {
+        if (hasReactRenderedContent() || hasAppReadySignal()) return;
+
+        if (document.visibilityState === 'hidden') {
+          window.setTimeout(function () {
+            if (!hasReactRenderedContent() && !hasAppReadySignal()) {
+              silentRecover('watchdog-stage2-after-hidden');
+            }
+          }, 5000);
+          return;
+        }
+
+        silentRecover('watchdog-stage2-app-not-rendered');
+      }, WATCHDOG_STAGE2_MS);
+
+      // window load 之後的輔助拆除：
+      //   ⚠️ 2026-07-08 教訓：舊條件「React 有內容就拆」會繞過 App.jsx 的壁紙預熱閘與
+      //   LockScreen 的壁紙就緒閘 —— AppContent 掛載即有內容，但主頁/鎖屏壁紙還在
+      //   async 解析，提前拆 overlay = 先閃幾秒默認樣式才變美化。
+      //   現在必須同時滿足：① app-ready（App.jsx initApp 完成，含壁紙預熱）
+      //   ② 非 locking-mode（鎖屏由 LockScreen 自己等壁紙就緒後拆，這裡不搶）。
+      //   卡死兜底交給下方 20s content-poll 與 watchdog，永不永久蝴蝶。
+      window.addEventListener('load', function () {
+        window.setTimeout(function () {
+          if (hasReactRenderedContent() && hasAppReadySignal()
+              && !document.body.classList.contains('locking-mode')) {
+            forceRemoveLoadingOverlay('window-load');
+          }
+        }, 300);
+      }, { once: true });
+
+      // 🩹 兜底輪詢（僅【最後手段】，不在正常載入期拆）：
+      //   ⚠️ 教訓：曾經「React 一有內容就立即拆」太激進 —— App 在 initApp 完成前 render 的是
+      //   null（空），此時拆 overlay 會露出【純白屏】（還原後每次白屏、偶爾碰巧進去即此）。
+      //   正解：正常情況 overlay 由 App.jsx initApp 完成後（__nuojijiAppReady）主動拆，butterfly
+      //   一直轉著等它，不會露白。本輪詢只在【initApp 疑似卡死】時兜底：React 有內容但 20 秒
+      //   仍沒 app-ready → 才拆（避免永久蝴蝶）。露出的多半是 initApp 卡在半路的畫面，仍勝過死轉。
+      var _pollStart = Date.now();
+      var _overlayPoll = window.setInterval(function () {
+        if (overlayRemoved) { window.clearInterval(_overlayPoll); return; }
+        // app-ready 已由 App.jsx 主動拆過了，這裡只是保險自停。
+        if (hasAppReadySignal()) { window.clearInterval(_overlayPoll); return; }
+        // 只有「有內容 + 超過 20s 還沒 app-ready」才判定 initApp 卡住，兜底拆除。
+        if (hasReactRenderedContent() && (Date.now() - _pollStart) > 20000) {
+          forceRemoveLoadingOverlay('content-poll-timeout');
+          window.clearInterval(_overlayPoll);
+        }
+      }, 1000);
+      // 安全上限：90 秒後停止輪詢（此時要嘛已拆、要嘛 watchdog 已接手），不留常駐定時器。
+      window.setTimeout(function () { try { window.clearInterval(_overlayPoll); } catch (_e) {} }, 90000);
+
+      // 🔬 卡住自診斷：15 秒仍沒 app-ready，就把啟動診斷打在蝴蝶畫面上（無 Mac 也能看）。
+      //   ⚠️ 例外：sql-runtime-enable / ota-pending 是【合法長階段】（存儲遷移最長可跑
+      //   20+6 秒、OTA 開機下載更久），此時顯示友好提示而非「載入異常」紅字——真機實錄
+      //   用戶在遷移第 18 秒截了滿屏診斷紅字來報「壞了」。階段開始 45 秒後仍沒好才升級真診斷。
+      // 啟動起算點與「友好等待」升級成真診斷的上限（超過就一定給診斷，不永久隱瞞）
+      var _diagT0 = Date.now();
+      var DIAG_UPGRADE_MS = 45000;
+      function showStuckDiag() {
+        if (window.__NUOJIJI_REFERENCE_MIRROR__) return;
+        try {
+          if (hasAppReadySignal()) return;         // 已進 app，不顯示
+          var el = document.getElementById('stuck-diag-text');
+          if (!el) return;
+          try {
+            // 優先讀本次啟動的記憶體鏡像：localStorage 寫不進去時（iOS 儲存吃緊）
+            // 持久值會停在很久以前那次會話，拿它當現場會誤導定位。
+            var bsObj = (window.__nuojijiBootStageLive && window.__nuojijiBootStageLive.stage)
+              ? window.__nuojijiBootStageLive : null;
+            if (!bsObj) {
+              var bsRaw = localStorage.getItem('nuojiji_boot_stage');
+              bsObj = bsRaw ? JSON.parse(bsRaw) : null;
+            }
+            var stg = bsObj && bsObj.stage ? String(bsObj.stage) : '';
+            var fresh = bsObj && bsObj.at && (Date.now() - bsObj.at) < 45000;
+            if (fresh && (stg.indexOf('sql-runtime') === 0 || stg.indexOf('ota-pending') === 0)) {
+              // 遷移代碼正在自己上屏實時進度(x/61)→ 別用靜態文案蓋掉
+              if (window.__nuojijiMigProgressActive !== true) {
+                el.textContent = stg.indexOf('ota') === 0
+                  ? '正在準備更新，請稍候…'
+                  : '正在升級資料儲存（資料不會遺失），請稍候，App 將自動進入…';
+                el.style.display = 'block';
+              }
+              window.setTimeout(showStuckDiag, 15000); // 之後再查,超過 45 秒未進展才顯示真診斷
+              return;
+            }
+
+            // 🚦 還在往前跑就別喊「載入異常」（2026-08-30 真機實錄）：
+            //   APK 用戶截圖回報「載入異常」時，啟動階段其實是 5 秒前才更新的
+            //   initapp-phase1-read（10s 超時內、正常推進中），auth 也還在飛
+            //   （大陸網路下 getSession 退避重試最壞要 30s）。15 秒就滿屏紅字診斷
+            //   = 對【慢但正常】的啟動喊狼來了，用戶當場強退，反而錯過本來要進去的那一刻。
+            //   規則：階段在 12 秒內動過、或 auth 還在進行中 → 顯示友好等待文案並稍後再查；
+            //   只有【階段不再前進】或開機超過 UPGRADE_MS 才升級成真診斷（永不永久隱瞞）。
+            var _sinceBoot = Date.now() - _diagT0;
+            var _stageFresh = bsObj && bsObj.at && (Date.now() - bsObj.at) < 12000;
+            if (_sinceBoot < DIAG_UPGRADE_MS && (_stageFresh || isAuthInFlight())) {
+              el.textContent = isAuthInFlight() && !_stageFresh
+                ? '正在連線帳號（網路較慢），請稍候…'
+                : '正在載入資料，請稍候…';
+              el.style.display = 'block';
+              window.setTimeout(showStuckDiag, 8000);
+              return;
+            }
+          } catch (_eS) { }
+          var lines = ['⚠️ 載入異常，診斷資訊（請截圖回報）：'];
+          try {
+            var live = window.__nuojijiBootStageLive;
+            if (live && live.stage) {
+              // 本次啟動的真實階段（記憶體），並標示是否寫得進 localStorage
+              lines.push('啟動階段(本次): ' + JSON.stringify(live)
+                + (window.__nuojijiBootStagePersisted === false ? ' ⚠️LS寫入失敗' : ''));
+            } else {
+              lines.push('啟動階段(本次): (無 — 主腳本尚未寫入任何階段)');
+            }
+            var bs = localStorage.getItem('nuojiji_boot_stage');
+            if (bs) {
+              var ageMin = '';
+              try {
+                var o = JSON.parse(bs);
+                if (o && o.at) ageMin = ' (' + Math.round((Date.now() - o.at) / 60000) + '分鐘前)';
+              } catch (_eA) { }
+              lines.push('啟動階段(存檔): ' + String(bs) + ageMin);
+            }
+          } catch (_e1) { lines.push('啟動階段: (讀取失敗)'); }
+          // 🕒 本次啟動時間線（只列最耗時的幾段）：光看「卡在哪一階段」看不出
+          //    「前面 9 秒被誰吃掉了」，這幾個數字能一次指名道姓。
+          try {
+            var _tl = window.__nuojijiBootTimeline;
+            if (_tl && _tl.length) {
+              var _top = _tl.slice().sort(function (a, b) { return (b.d || 0) - (a.d || 0); }).slice(0, 4);
+              lines.push('耗時TOP: ' + _top.map(function (x) { return x.s + '+' + (x.d || 0) + 'ms'; }).join(' , '));
+            }
+          } catch (_e7) { }
+          // 🛟 localStorage 配額現場：寫不下的 key + 總用量（QuotaExceededError 專用線索）
+          try {
+            var _q = window.__nuojijiLsQuota;
+            if (_q) lines.push('LS配額爆: ' + _q.key + ' (值' + (_q.size || 0) + '字, 已用約' + (_q.usedKB || '?') + 'KB)');
+            var _u = 0, _big = [], _i, _k, _sz;
+            for (_i = 0; _i < localStorage.length; _i++) {
+              _k = localStorage.key(_i);
+              _sz = (_k || '').length + ((localStorage.getItem(_k) || '').length);
+              _u += _sz;
+              _big.push([_k, _sz]);
+            }
+            _big.sort(function (a, b) { return b[1] - a[1]; });
+            lines.push('LS用量: 約' + Math.round(_u / 512) + 'KB / ' + localStorage.length + '個key,最大: '
+              + _big.slice(0, 3).map(function (x) { return String(x[0]).slice(0, 28) + '=' + Math.round(x[1] / 512) + 'KB'; }).join(' , '));
+          } catch (_e8) { }
+          try {
+            var rb = localStorage.getItem('nuojiji_reload_breadcrumb');
+            if (rb) lines.push('上次reload: ' + String(rb));
+          } catch (_e2) { }
+          try {
+            var _hb2 = localStorage.getItem('nuojiji_boot_hb');
+            if (_hb2) lines.push('心跳: ' + String(_hb2) + ' (now=' + Date.now() + ')');
+          } catch (_e4) { }
+          // 🔬 開機錯誤黑盒：主腳本沒起來時，這裡是唯一能說明「為什麼」的線索
+          try {
+            var _be = window.__nuojijiBootErrors;
+            if (!_be || !_be.length) {
+              var _beRaw = localStorage.getItem('nuojiji_boot_errors');
+              if (_beRaw) lines.push('開機錯誤(上次): ' + String(_beRaw).slice(0, 400));
+            } else {
+              lines.push('開機錯誤(本次): ' + JSON.stringify(_be).slice(0, 400));
+            }
+          } catch (_e5) { }
+          try {
+            var st = localStorage.getItem('__nuojiji_sqlite_selftest');
+            if (st) lines.push('SQLite: ' + String(st));
+          } catch (_e3) { }
+          try {
+            var _rl = window.__nuojijiReinjectLog;
+            if (_rl && _rl.length) lines.push('entry重注入: ' + _rl.join(' | '));
+          } catch (_e6) { }
+          lines.push('React內容: ' + (hasReactRenderedContent() ? '有' : '無') +
+                     ' / 主腳本: ' + (hasMainScriptStarted() ? '有' : '無') +
+                     ' / auth中: ' + (isAuthInFlight() ? '是' : '否'));
+          el.textContent = lines.join('\n');
+          el.style.display = 'block';
+          // 主腳本從未執行 = entry module 根本沒載起來，後面不會再有任何自動進展，
+          // 此時直接給出手動重試出口（不清 SW/快取，不會打斷任何進行中的回灌）。
+          if (!hasMainScriptStarted()) {
+            // entry 抓不到 = 這台機器的離線兜底多半已被之前的 hard reload 清光，先把 SW 裝回去
+            tryRestoreServiceWorker();
+            // 還有額度就繼續重試（懸住的網絡往往下一次就過），額度用盡才把手動出口交給用戶。
+            tryReinjectEntry().then(function (ok) {
+              if (ok) return;
+              if (reinjectTries < REINJECT_MAX) {
+                window.setTimeout(showStuckDiag, 15000);
+                return;
+              }
+              showLastResortRetry();
+            });
+          }
+        } catch (_e) { }
+      }
+      window.setTimeout(showStuckDiag, 15000);
+    })();
+
+    // 在 React 加载前立即检查锁屏设置，防止 dock 闪现
+    (function () {
+      const lockEnabled = localStorage.getItem('lockScreenEnabled') === 'true';
+      const alreadyUnlocked = sessionStorage.getItem('unlocked') === 'true';
+
+      if (lockEnabled && !alreadyUnlocked) {
+        document.body.classList.add('locking-mode');
+      }
+    })();
+
+    // 🔧 CLS 優化：showAppLabels / textColor 等設定原本從 IndexedDB 異步載入，
+    //    React mount 後才 toggle body class，導致 icon 從 60→65px、label 顯示/隱藏，
+    //    desktop icon CLS 高達 0.356。改用 localStorage 作 boot hint 在 React 之前同步套用。
+    (function () {
+      try {
+        // hide-app-labels：true 時 icon 變 65px 且 label 隱藏
+        if (localStorage.getItem('nuojiji-hide-app-labels') === 'true') {
+          document.body.classList.add('hide-app-labels');
+        }
+        // text-black-mode：純顏色不影響 layout，但同樣免閃
+        if (localStorage.getItem('nuojiji-text-black-mode') === 'true') {
+          document.body.classList.add('text-black-mode');
+        }
+      } catch (_e) { /* localStorage 被禁用時忽略 */ }
+    })();
+
+  </script>
+  <div id="root"></div>
+</body>
+
+</html>
