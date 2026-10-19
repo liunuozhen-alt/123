@@ -1,1 +1,1 @@
-/* obfuscated */const s='/doQvQ_doorkicker_6.9.89/assets/pdf.worker.min-yatZIOMy.mjs';export{s as default};
+/* obfuscated */const s='/assets/pdf.worker.min-yatZIOMy.mjs';export{s as default};

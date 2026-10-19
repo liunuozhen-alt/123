@@ -1,0 +1,5 @@
+# Cloudflare Pages SPA fallback
+# 静态文件优先命中；未命中的路径回落到 index.html（客户端路由）
+# 注意：CF Pages 会先解析真实存在的静态文件，再套用本规则，
+#       因此 /assets/* 等实体资源不会被重写。
+/*    /index.html   200

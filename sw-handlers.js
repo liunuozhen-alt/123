@@ -15,7 +15,7 @@ self.addEventListener('message', (event) => {
 // → 引用的 main-XXX.js 在線上實際已被新 build 覆蓋為 404 → handleChunkLoadFailure
 // 反覆 reload，SW 又給同樣的舊 index → 死循環。
 //
-// 自救策略：偵測到 /doQvQ_doorkicker_6.9.89/assets/main-*.js（或 /doQvQ_doorkicker_6.9.89/assets/vendor-react-*.js）回 404 →
+// 自救策略：偵測到 /assets/main-*.js（或 /assets/vendor-react-*.js）回 404 →
 //   1. 清掉所有 caches（包含 workbox 的 pages-cache 裡的舊 index）
 //   2. unregister 自己
 //   3. 通知客戶端 hard reload（main.jsx 的 hardReload 會帶 ?__nuojiji_reload=ts 繞瀏覽器 HTTP cache）
@@ -55,10 +55,10 @@ const triggerPoisonPill = async (reason) => {
     }
 }
 
-// ============ /doQvQ_doorkicker_6.9.89/assets/* 兩層 fallback：cache → network ============
+// ============ /assets/* 兩層 fallback：cache → network ============
 // 之前還有第三層 R2 fallback，已移除：
 //   原因 1：edge-router Worker 已對大陸用戶做東京加速 + CF Pages 404 fallback，
-//          /doQvQ_doorkicker_6.9.89/assets/* 在 Worker 層幾乎不會 404，R2 兜底已冗餘。
+//          /assets/* 在 Worker 層幾乎不會 404，R2 兜底已冗餘。
 //   原因 2：SW 從 /r2-fallback/* 拿到 chunk 後，即使重新包裝 Response，
 //          某些瀏覽器（Android Chromium 系如 Edge）仍可能把 module URL 認成 r2-fallback，
 //          導致同一份 React 以兩個 URL 進 module registry → 雙實例 → useMemo null 崩潰。
@@ -78,7 +78,7 @@ self.addEventListener('fetch', (event) => {
     }
 
     if (url.origin !== self.location.origin) return
-    if (!url.pathname.startsWith('/doQvQ_doorkicker_6.9.89/assets/')) return
+    if (!url.pathname.startsWith('/assets/')) return
 
     // 🔧 強制刷新模式（main.jsx 的 hardReload(true) 會在主 URL 加 ?__nuojiji_reload=<ts>）
     // 這代表用戶剛因 chunk 錯誤 / React 雙實例觸發了清緩存重載，
@@ -248,8 +248,8 @@ self.addEventListener('push', (event) => {
     const title = data.title || '糯嘰機';
     const options = {
         body: data.body || '新消息',
-        icon: data.avatar || '/doQvQ_doorkicker_6.9.89/pwa-512x512.png',
-        badge: '/doQvQ_doorkicker_6.9.89/pwa-512x512.png',
+        icon: data.avatar || '/pwa-512x512.png',
+        badge: '/pwa-512x512.png',
         tag: isAlarm ? `alarm-${data.alarmId}` : `worker-${Date.now()}`,
         vibrate: [200, 100, 200],
         // 鬧鐘通知不自動消失，需要用戶手動關閉

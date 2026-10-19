@@ -209,19 +209,8 @@
   <meta name="YoudaoBot" content="noindex, nofollow" />
   <meta name="Bytespider" content="noindex, nofollow" />
 
-  <!-- 桌面 widget 常用圖床 preconnect：省 DNS+TLS 1–2 秒
-       LCP 元素往往是用戶在 Polaroid / Note / Image widget 設的圖床圖，
-       這些 host 在首屏就會被請求，提早建連能顯著改善 P75/P90 -->
-  <link rel="preconnect" href="https://i.postimg.cc" crossorigin />
-  <link rel="preconnect" href="https://pic1.imgdb.cn" crossorigin />
-  <link rel="preconnect" href="https://nos.netease.com" crossorigin />
-  <link rel="preconnect" href="https://img.heliar.top" crossorigin />
-  <link rel="dns-prefetch" href="https://i.postimg.cc" />
-  <link rel="dns-prefetch" href="https://pic1.imgdb.cn" />
-  <link rel="dns-prefetch" href="https://nos.netease.com" />
-  <link rel="dns-prefetch" href="https://img.heliar.top" />
-  <link rel="dns-prefetch" href="https://pic5.fukit.cn" />
-  <link rel="dns-prefetch" href="https://pic1.imgdb.cc" />
+  <!-- 🔌 离线单机版：移除对站外图床的 preconnect / dns-prefetch。
+       纯本地应用不再请求任何外部 host，保留这些只会产生无意义的 DNS/连接尝试。 -->
 
   <!-- Favicon for browsers -->
   <link rel="icon" type="image/png" sizes="512x512" href="./pwa-512x512.png?v=2" />
@@ -323,7 +312,7 @@
         // VivoBrowser/HeyTapBrowser 為 ROM 自帶瀏覽器；
         // Redmi/HUAWEI/HONOR/OPPO/vivo/realme 為設備型號標識
         var isCnRom = /MIUI|HarmonyOS|EMUI|HUAWEI|HONOR|HONORBrowser|VivoBrowser|HeyTapBrowser|HeyTap|\bOPPO\b|\bvivo\b|Redmi|XiaoMi|realme|Meizu/i.test(ua);
-        var href = isCnRom ? '/doQvQ_doorkicker_6.9.89/manifest-cn.webmanifest' : '/doQvQ_doorkicker_6.9.89/manifest.webmanifest';
+        var href = isCnRom ? '/manifest-cn.webmanifest' : '/manifest.webmanifest';
         var link = document.createElement('link');
         link.rel = 'manifest';
         link.href = href;
@@ -1115,44 +1104,114 @@
     }
 
   </style>
+  <!-- 🔌 离线单机版 · 冷启动预热（L5）：
+       把主入口 chunk 及其「静态依赖」提前 modulepreload，消除「先解析入口、再逐个发现依赖」的串行等待。
+       全部为本地同源资源；离线时由 SW 从预缓存直接命中，零网络、零 404。
+       main 的 ?v= 与下方动态 import 完全一致，避免因 URL 不一致被当成两个模块重复下载。 -->
+  <link rel="modulepreload" crossorigin href="/assets/main-BDB-lJFa.js?v=9606408">
+  <link rel="modulepreload" crossorigin href="/assets/app-core-DDmh9wYw.js">
+  <link rel="modulepreload" crossorigin href="/assets/vendor-react-Dqj4ggoj.js">
+  <link rel="modulepreload" crossorigin href="/assets/vendor-dexie-KLdnSHz2.js">
+  <link rel="modulepreload" crossorigin href="/assets/vendor-lucide-BTP96YLz.js">
+  <link rel="modulepreload" crossorigin href="/assets/vendor-crypto-CUtotGuE.js">
+  <link rel="modulepreload" crossorigin href="/assets/vendor-supabase-Bcpm_8qV.js">
+  <link rel="modulepreload" crossorigin href="/assets/downloadToast-DJcl0FcJ.js">
+  <link rel="modulepreload" crossorigin href="/assets/messagingCssScope-BogCy_Fn.js">
+  <link rel="modulepreload" crossorigin href="/assets/modulepreload-polyfill-YP0FEG5d.js">
   <script type="module">
-    // GitHub Pages reference boot: clear any old root-scope SW/cache before loading Vite chunks.
-    (async function(){
+    // 离线单机版启动：
+    //   1) 注册离线优先 Service Worker（全量预缓存本地资源，断网可秒开内部 App）
+    //   2) 加载应用主模块
+    // ⚠️ 不再注销 SW / 清空 Cache Storage —— 那是「在线镜像」防止旧缓存的自救动作，
+    //    在离线单机场景会彻底破坏离线能力，故移除。
+    (async function () {
+      // ⚠️ 不阻塞启动：SW 注册/预热全部放后台，绝不 await ready（首次安装要下全量资源）
       try {
-        let controlled = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
         if ('serviceWorker' in navigator) {
-          const regs = await navigator.serviceWorker.getRegistrations();
-          await Promise.all(regs.map(r => r.unregister().catch(() => false)));
+          navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(function (reg) {
+            navigator.serviceWorker.ready.then(function (r) {
+              if (r && r.active) r.active.postMessage({ type: 'WARMUP' });
+            }).catch(function () {});
+          }).catch(function () {});
         }
-        if ('caches' in window) {
-          const keys = await caches.keys();
-          await Promise.all(keys.map(k => caches.delete(k)));
-        }
-        if (controlled && sessionStorage.getItem('nuojiji_ref_sw_reloaded') !== '1') {
-          sessionStorage.setItem('nuojiji_ref_sw_reloaded','1');
-          location.reload();
-          return;
-        }
-        sessionStorage.removeItem('nuojiji_ref_sw_reloaded');
-      } catch (_) {}
-      await import('/doQvQ_doorkicker_6.9.89/assets/main-BDB-lJFa.js?v=9606408');
+      } catch (_e) { /* SW 不可用不阻断启动 */ }
+      try {
+        await import('/assets/main-BDB-lJFa.js?v=9606408');
+      } catch (_e) {
+        console.error('[offline] 主模块加载失败', _e);
+      }
     })();
   </script>
-  <link rel="stylesheet" crossorigin href="/doQvQ_doorkicker_6.9.89/assets/app-core-l4Tnf7Uu.css">
-  <link rel="stylesheet" crossorigin href="/doQvQ_doorkicker_6.9.89/assets/messagingCssScope-BHg59bCh.css">
-  <link rel="stylesheet" crossorigin href="/doQvQ_doorkicker_6.9.89/assets/main-DPBOWPC8.css">
-  <link rel="stylesheet" crossorigin href="/doQvQ_doorkicker_6.9.89/assets/NotificationBar-CtpJvd3k.css">
-  <link rel="stylesheet" crossorigin href="/doQvQ_doorkicker_6.9.89/assets/vendor-fonts-H_UEFLAr.css">
+  <link rel="stylesheet" crossorigin href="/assets/app-core-l4Tnf7Uu.css">
+  <link rel="stylesheet" crossorigin href="/assets/messagingCssScope-BHg59bCh.css">
+  <link rel="stylesheet" crossorigin href="/assets/main-DPBOWPC8.css">
+  <link rel="stylesheet" crossorigin href="/assets/NotificationBar-CtpJvd3k.css">
+  <link rel="stylesheet" crossorigin href="/assets/vendor-fonts-H_UEFLAr.css">
 
 
   <script>
-    // Static archaeology mirror: freeze vendor update/cache machinery.
+    // ── 离线单机版 ──
+    // 1) 冻结厂商 OTA / 更新机制，标记离线模式（供启动看门狗识别，避免误清离线缓存）
     window.__NUOJIJI_REFERENCE_MIRROR__ = true;
+    window.__NUOJIJI_OFFLINE_MODE__ = true;
     try { localStorage.removeItem('nuojiji_ota_pending'); } catch (_) {}
-    try {
-      if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then(function(regs){ regs.forEach(function(r){ try { r.unregister(); } catch (_) {} }); }).catch(function(){});
-      if ('caches' in window) caches.keys().then(function(keys){ return Promise.all(keys.map(function(k){ return caches.delete(k); })); }).catch(function(){});
-    } catch (_) {}
+
+    // 2) 外网请求短路：纯本地应用，一切指向站外的 fetch/XHR/beacon 立即失败，
+    //    避免等待不可达的厂商后端（账号/云同步/推送/统计等）造成启动与开内部 App 的卡顿。
+    //    仅拦截 http(s) 跨域请求；同源、blob:、data: 全部放行。
+    (function () {
+      try {
+        var origin = location.origin;
+        function isBlocked(input) {
+          var u = '';
+          try {
+            if (typeof input === 'string') u = input;
+            else if (input && input.url) u = input.url;
+            else if (input && typeof input.toString === 'function') u = input.toString();
+          } catch (_e) { return false; }
+          if (!u) return false;
+          var url;
+          try { url = new URL(u, origin); } catch (_e) { return false; }
+          if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+          return url.origin !== origin;
+        }
+        if (window.fetch) {
+          var _fetch = window.fetch;
+          window.fetch = function (input, init) {
+            if (isBlocked(input)) return Promise.reject(new TypeError('offline-blocked-remote'));
+            return _fetch.apply(this, arguments);
+          };
+        }
+        if (window.XMLHttpRequest) {
+          var _open = XMLHttpRequest.prototype.open;
+          var _send = XMLHttpRequest.prototype.send;
+          XMLHttpRequest.prototype.open = function (method, url) {
+            try { this.__nuoBlocked = isBlocked(url); } catch (_e) { this.__nuoBlocked = false; }
+            return _open.apply(this, arguments);
+          };
+          XMLHttpRequest.prototype.send = function () {
+            if (this.__nuoBlocked) {
+              var xhr = this;
+              setTimeout(function () {
+                try {
+                  xhr.dispatchEvent(new ProgressEvent('error'));
+                  if (typeof xhr.onreadystatechange === 'function') xhr.onreadystatechange();
+                } catch (_e) {}
+              }, 0);
+              return;
+            }
+            return _send.apply(this, arguments);
+          };
+        }
+        if (navigator.sendBeacon) {
+          var _beacon = navigator.sendBeacon.bind(navigator);
+          navigator.sendBeacon = function (url) {
+            if (isBlocked(url)) return false;
+            return _beacon.apply(navigator, arguments);
+          };
+        }
+      } catch (_e) { /* 短路失败不影响启动 */ }
+    })();
   </script>
 <script>
     (function(){
@@ -1662,6 +1721,8 @@
             };
             if (!escalate) { go(); return; }
             window.setTimeout(go, 8000);   // 安全網：清理卡住也一定會重載
+            // 🔌 离线单机版：不注销 SW、不清缓存，直接重载即可（保护全量离线预缓存）
+            if (window.__NUOJIJI_OFFLINE_MODE__) { go(); return; }
             Promise.all([
               (function () {
                 if (!('serviceWorker' in navigator)) return Promise.resolve();
@@ -1760,6 +1821,8 @@
         window.setTimeout(doReload, 15000);
 
         var unregisterSW = function () {
+          // 🔌 离线单机版：绝不注销 SW，否则离线能力与全量预缓存都失效
+          if (window.__NUOJIJI_OFFLINE_MODE__) return Promise.resolve();
           if (!('serviceWorker' in navigator)) return Promise.resolve();
           return navigator.serviceWorker.getRegistrations().then(function (regs) {
             return Promise.all(regs.map(function (r) {
@@ -1768,6 +1831,8 @@
           }).catch(function () { });
         };
         var clearCaches = function () {
+          // 🔌 离线单机版：绝不清空 Cache Storage，保护离线预缓存不被误删
+          if (window.__NUOJIJI_OFFLINE_MODE__) return Promise.resolve();
           if (!('caches' in window)) return Promise.resolve();
           return caches.keys().then(function (names) {
             return Promise.all(names.map(function (n) {
@@ -1942,6 +2007,8 @@
       //   抓回來後用 content-length 對一次位元組數，確認這回不是半截；不合就再抓一次。
       //   全程失敗一律吞掉，回退到既有的注入 → silentRecover 鏈，零回歸。
       function healAsset(src) {
+        // 🔌 离线单机版：不 purge 缓存、也无需走网络重抓（离线本就没有网络残档问题）
+        if (window.__NUOJIJI_OFFLINE_MODE__) return Promise.resolve('offline-skip');
         var abs;
         try { abs = new URL(src, window.location.href).href; } catch (_e) { return Promise.resolve(''); }
         var corrupt = [];
@@ -2011,7 +2078,8 @@
           }
           navigator.serviceWorker.getRegistrations().then(function (regs) {
             if (regs && regs.length) return;   // 還在，不動它
-            Promise.resolve(null); // reference mirror: SW registration disabled
+            // 🔌 离线单机版：网页端把 sw.js 注册回去（原生套殼已在上方 unregister 分支處理）
+            navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function () { });
           }).catch(function () { });
         } catch (_e) { }
       }
